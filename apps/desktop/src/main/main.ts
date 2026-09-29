@@ -29,7 +29,15 @@ function createMainWindow(): void {
     minWidth: 860,
     minHeight: 620,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
-    backgroundColor: '#0d1117',
+    backgroundColor: process.platform === 'darwin' ? '#00000000' : '#10141e',
+    ...(process.platform === 'darwin'
+      ? {
+          // Keep the native traffic lights visible while the renderer draws the inset title area.
+          trafficLightPosition: { x: 16, y: 16 },
+          vibrancy: 'under-window' as const,
+          visualEffectState: 'active' as const,
+        }
+      : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

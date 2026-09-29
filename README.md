@@ -31,5 +31,6 @@ pnpm native:build
 pnpm native:test
 ```
 
-The Electron application now includes the native CaptureService protocol, AVAssetWriter recording,
-and the supervised Electron-to-Swift bridge. The renderer-facing recording UI is the next phase.
+The Electron application includes the native CaptureService protocol, AVAssetWriter recording, the
+supervised Electron-to-Swift bridge, and a responsive recorder workspace with library and settings
+views. Raw media remains entirely inside the native capture pipeline.

@@ -106,6 +106,12 @@ function finiteNumber(value: unknown, label: string): number {
   return value;
 }
 
+function nullableFiniteNumber(value: unknown, label: string): number | null {
+  // Swift Codable omits nil optional properties by default, while some native versions emit null.
+  // Treat both representations as the same absent metadata value at this boundary.
+  return value === null || value === undefined ? null : finiteNumber(value, label);
+}
+
 export function parseNativeSources(value: unknown): readonly NativeSourceDto[] {
   if (!Array.isArray(value)) {
     throw new DomainError('NATIVE_SERVICE_FAILURE', 'Native source response was not an array.');
@@ -117,10 +123,9 @@ export function parseNativeSources(value: unknown): readonly NativeSourceDto[] {
       id: stringValue(source.id, 'source.id'),
       kind: stringValue(source.kind, 'source.kind'),
       name: stringValue(source.name, 'source.name'),
-      width: source.width === null ? null : finiteNumber(source.width, 'source.width'),
-      height: source.height === null ? null : finiteNumber(source.height, 'source.height'),
-      scaleFactor:
-        source.scaleFactor === null ? null : finiteNumber(source.scaleFactor, 'source.scaleFactor'),
+      width: nullableFiniteNumber(source.width, 'source.width'),
+      height: nullableFiniteNumber(source.height, 'source.height'),
+      scaleFactor: nullableFiniteNumber(source.scaleFactor, 'source.scaleFactor'),
       isAvailable: booleanValue(source.isAvailable, 'source.isAvailable'),
     };
   });

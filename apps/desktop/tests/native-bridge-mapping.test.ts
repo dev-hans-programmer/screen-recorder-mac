@@ -10,6 +10,7 @@ import {
   mapNativeSource,
   parseNativeCapabilities,
   parseNativePermissions,
+  parseNativeSources,
   toCaptureCapabilities,
   toNativeDomainError,
 } from '../src/main/infrastructure/native/native-mappers';
@@ -56,6 +57,29 @@ describe('native bridge infrastructure', () => {
     expect(capabilities.supportedProfileIds).toEqual(['compatible', 'balanced']);
     expect(capabilities.supportedFrameRates).toEqual([30, 60]);
     expect(source.dimensions).toEqual({ width: 3840, height: 2160 });
+  });
+
+  it('accepts omitted optional metadata from Swift Codable source responses', () => {
+    expect(
+      parseNativeSources([
+        {
+          id: 'application:com.example.App',
+          kind: 'application',
+          name: 'Example App',
+          isAvailable: true,
+        },
+      ]),
+    ).toEqual([
+      {
+        id: 'application:com.example.App',
+        kind: 'application',
+        name: 'Example App',
+        width: null,
+        height: null,
+        scaleFactor: null,
+        isAvailable: true,
+      },
+    ]);
   });
 
   it('maps native permission and service failures to domain errors', () => {

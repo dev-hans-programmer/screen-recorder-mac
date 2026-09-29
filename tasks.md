@@ -336,32 +336,32 @@ A task is complete when:
 
 ## Phase 7 — React application shell and design system
 
-- [ ] T070 Create the application shell.
+- [x] T070 Create the application shell.
   - Add dashboard layout.
   - Add navigation between recorder, library, and settings.
   - Add loading, empty, error, and permission states.
   - Acceptance: all primary screens render from a clean launch.
 
-- [ ] T071 Create the design system.
+- [x] T071 Create the design system.
   - Add color, spacing, typography, radii, shadows, and motion tokens.
   - Add light, dark, and system themes.
   - Add reusable buttons, toggles, cards, dialogs, menus, tooltips, and status indicators.
   - Acceptance: UI components are consistent and keyboard accessible.
 
-- [ ] T072 Add macOS window styling.
+- [x] T072 Add macOS window styling.
   - Configure hidden or inset title bar behavior.
   - Add appropriate vibrancy/transparency where stable.
   - Respect safe areas and display scaling.
   - Acceptance: the app feels visually native on supported macOS versions.
 
-- [ ] T073 Add responsive behavior.
+- [x] T073 Add responsive behavior.
   - Define minimum window dimensions.
   - Support compact and expanded layouts.
   - Use CSS container queries where helpful.
   - Support reduced motion.
   - Acceptance: the app remains usable at minimum and large window sizes.
 
-- [ ] T074 Add renderer state management.
+- [x] T074 Add renderer state management.
   - Keep domain state transitions in application logic.
   - Keep transient UI state in the renderer store.
   - Avoid rerendering the whole application on timer or progress changes.
