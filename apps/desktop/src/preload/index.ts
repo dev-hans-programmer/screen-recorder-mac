@@ -1,7 +1,6 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
-// Keep this bridge intentionally small until the typed application IPC contract is added.
-// Renderer code must never receive ipcRenderer or arbitrary native capabilities.
-contextBridge.exposeInMainWorld('screenRecorderFoundation', {
-  ready: true,
-});
+import { createScreenRecorderApi } from './api';
+
+// Only purpose-built methods cross this boundary; ipcRenderer itself never reaches the renderer.
+contextBridge.exposeInMainWorld('screenRecorder', createScreenRecorderApi(ipcRenderer));

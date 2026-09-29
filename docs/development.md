@@ -43,6 +43,11 @@ Copy `apps/desktop/.env.example` to a local `.env` file only when needed. Do not
 | `SCREEN_RECORDER_LOG_LEVEL` | `silent`, `error`, `warn`, `info`, `debug` | `info`  | Controls future main-process logging       |
 | `SCREEN_RECORDER_DEVTOOLS`  | `0`, `1`                                   | `0`     | Opens Chromium DevTools during development |
 
-## Expected Phase 1 behavior
+## Expected Phase 3 behavior
 
-The app opens a small foundation screen showing the project name, current version, active platform target, and the fact that native capture has not been implemented yet.
+The app opens the foundation screen showing the project name, current version, active platform
+target, and the fact that native capture has not been implemented yet. The renderer also has access
+to the typed `window.screenRecorder` bridge, while capture commands remain unavailable until the
+Swift service is added.
+
+See [security.md](security.md) for the Electron boundary and IPC rules.

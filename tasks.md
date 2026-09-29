@@ -165,18 +165,18 @@ A task is complete when:
 
 ## Phase 3 — Shared contracts and Electron boundaries
 
-- [ ] T030 Create shared IPC contracts.
+- [x] T030 Create shared IPC contracts.
   - Define commands, responses, events, errors, and protocol version.
   - Use runtime schemas for validation.
   - Acceptance: invalid payloads are rejected before reaching application services.
 
-- [ ] T031 Implement the secure preload API.
+- [x] T031 Implement the secure preload API.
   - Expose only purpose-built methods through `contextBridge`.
   - Do not expose `ipcRenderer`, filesystem access, shell access, or arbitrary channel access.
   - Add typed event subscription cleanup.
   - Acceptance: renderer code can call approved APIs but cannot access Node.js or Electron internals.
 
-- [ ] T032 Configure Electron security defaults.
+- [x] T032 Configure Electron security defaults.
   - Enable context isolation.
   - Disable Node integration in renderers.
   - Enable renderer sandboxing.
@@ -185,12 +185,12 @@ A task is complete when:
   - Validate IPC senders.
   - Acceptance: security configuration is tested and documented.
 
-- [ ] T033 Implement main-process dependency composition.
+- [x] T033 Implement main-process dependency composition.
   - Construct repositories, native service clients, use cases, loggers, and IPC controllers in one composition root.
   - Keep infrastructure wiring out of domain and UI code.
   - Acceptance: dependencies can be replaced with fakes in tests.
 
-- [ ] T034 Implement main-process lifecycle management.
+- [x] T034 Implement main-process lifecycle management.
   - Single-instance lock.
   - App startup and shutdown.
   - Window lifecycle.

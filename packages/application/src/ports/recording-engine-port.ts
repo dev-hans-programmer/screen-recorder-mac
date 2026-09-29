@@ -11,4 +11,5 @@ export interface RecordingEnginePort {
   pause(handleId: string): Promise<void>;
   resume(handleId: string): Promise<void>;
   stop(handleId: string): Promise<RecordingArtifact>;
+  dispose?(): Promise<void>;
 }

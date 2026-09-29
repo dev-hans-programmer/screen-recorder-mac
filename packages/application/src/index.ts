@@ -5,6 +5,7 @@ export * from './ports/recording-engine-port';
 export * from './ports/repositories';
 export * from './services/validate-recording-request';
 export * from './use-cases/check-capture-permissions';
+export * from './use-cases/get-preferences';
 export * from './use-cases/list-capture-sources';
 export * from './use-cases/list-recordings';
 export * from './use-cases/pause-recording';
