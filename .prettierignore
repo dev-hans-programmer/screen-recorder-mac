@@ -1,0 +1,7 @@
+node_modules
+.pnpm-store
+apps/desktop/.vite
+apps/desktop/out
+apps/desktop/coverage
+native/.build
+*.lock

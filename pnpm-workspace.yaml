@@ -1,0 +1,15 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Electron Forge currently resolves the official @electron/node-gyp Git
+# subdependency. pnpm 12 requires this workspace setting to allow it.
+allowBuilds:
+  fs-xattr: true
+  macos-alias: true
+
+blockExoticSubdeps: false
+
+# Forge checks this setting before starting or packaging the app.
+publicHoistPattern:
+  - '*'

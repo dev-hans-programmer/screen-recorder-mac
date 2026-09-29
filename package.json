@@ -1,0 +1,27 @@
+{
+  "name": "screen-recorder-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A native-feeling macOS screen recorder built with React, Electron, TypeScript, and Swift.",
+  "packageManager": "pnpm@12.5.1",
+  "engines": {
+    "node": ">=24 <27",
+    "pnpm": ">=12 <13"
+  },
+  "scripts": {
+    "start": "pnpm --filter @screen-recorder/desktop start",
+    "dev": "pnpm --filter @screen-recorder/desktop start",
+    "package": "pnpm --filter @screen-recorder/desktop package",
+    "make": "pnpm --filter @screen-recorder/desktop make",
+    "typecheck": "pnpm --filter @screen-recorder/desktop typecheck",
+    "lint": "pnpm --filter @screen-recorder/desktop lint",
+    "test": "pnpm --filter @screen-recorder/desktop test",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "clean": "rimraf apps/desktop/.vite apps/desktop/out apps/desktop/coverage"
+  },
+  "devDependencies": {
+    "prettier": "3.9.9",
+    "rimraf": "6.1.3"
+  }
+}
