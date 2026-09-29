@@ -21,13 +21,41 @@ public enum CaptureServiceSmokeChecks {
       width: 1920,
       height: 1080,
       frameRate: 60,
+      profileId: "compatible",
+      outputDirectory: NSTemporaryDirectory(),
       showsCursor: true,
       showsMouseClicks: false,
       systemAudio: false,
       microphone: false,
       microphoneDeviceId: nil
     )
-    _ = try CaptureConfiguration(payload: configuration)
+    let validatedConfiguration = try CaptureConfiguration(payload: configuration)
+
+    guard validatedConfiguration.profileId == .compatible else {
+      throw SmokeCheckError.failed("Compatible profile validation failed.")
+    }
+
+    for profile in NativeRecordingProfileId.allCases {
+      let profileConfiguration = CaptureConfigurationPayload(
+        sourceId: "display:1",
+        sourceKind: "display",
+        region: nil,
+        width: 3840,
+        height: 2160,
+        frameRate: 60,
+        profileId: profile.rawValue,
+        outputDirectory: NSTemporaryDirectory(),
+        showsCursor: true,
+        showsMouseClicks: false,
+        systemAudio: false,
+        microphone: false,
+        microphoneDeviceId: nil
+      )
+      let validatedProfile = try CaptureConfiguration(payload: profileConfiguration)
+      guard validatedProfile.profileId == profile else {
+        throw SmokeCheckError.failed("Recording profile validation failed for \(profile.rawValue).")
+      }
+    }
 
     let diagnostics = CaptureDiagnostics(maxPendingSamples: 2)
     diagnostics.record(sampleKind: .video, timestamp: nil, isValid: false)

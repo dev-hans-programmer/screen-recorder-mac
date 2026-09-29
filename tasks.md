@@ -255,50 +255,50 @@ A task is complete when:
 
 ## Phase 5 — Native encoding and file finalization
 
-- [ ] T050 Implement AVAssetWriter session creation.
+- [x] T050 Implement AVAssetWriter session creation.
   - Create video and audio tracks.
   - Configure container and codec.
   - Configure dimensions and frame rate.
   - Configure bitrate or quality settings per profile.
   - Acceptance: a short recording opens correctly in QuickTime Player.
 
-- [ ] T051 Implement H.264/MP4 recording.
+- [x] T051 Implement H.264/MP4 recording.
   - Add compatibility profile.
   - Add hardware-encoder capability detection.
   - Add fallback errors.
   - Acceptance: H.264 recordings play on supported macOS players.
 
-- [ ] T052 Implement HEVC/MP4 recording.
+- [x] T052 Implement HEVC/MP4 recording.
   - Add balanced profile.
   - Validate 4K behavior.
   - Validate file size and quality.
   - Acceptance: HEVC recordings play correctly and are smaller than equivalent H.264 recordings in the expected cases.
 
-- [ ] T053 Implement ProRes/MOV recording where supported.
+- [x] T053 Implement ProRes/MOV recording where supported.
   - Add master-quality profile.
   - Warn about large file sizes.
   - Validate disk throughput requirements.
   - Acceptance: supported Macs can produce a valid high-quality MOV file.
 
-- [ ] T054 Implement audio synchronization.
+- [x] T054 Implement audio synchronization.
   - Synchronize system audio and microphone tracks.
   - Handle absent audio streams.
   - Handle microphone start delays.
   - Acceptance: audio remains synchronized during short and long recordings.
 
-- [ ] T055 Implement temporary-file and finalization behavior.
+- [x] T055 Implement temporary-file and finalization behavior.
   - Write to a `.partial` or temporary file.
   - Finalize the asset writer before exposing the file to the library.
   - Atomically move the completed file into the configured output directory.
   - Acceptance: failed recordings are not presented as completed recordings.
 
-- [ ] T056 Implement pause and resume.
+- [x] T056 Implement pause and resume.
   - Preserve a continuous final timeline.
   - Avoid encoding unwanted frames during pause.
   - Report paused duration accurately.
   - Acceptance: a paused recording resumes correctly without broken timestamps.
 
-- [ ] T057 Implement interruption and recovery.
+- [x] T057 Implement interruption and recovery.
   - Handle app quit.
   - Handle helper crash.
   - Handle display disconnect.

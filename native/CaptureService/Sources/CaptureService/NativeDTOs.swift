@@ -36,6 +36,7 @@ struct NativeCapabilities: Codable, Sendable, Equatable {
   let maxOutputWidth: Int
   let maxOutputHeight: Int
   let supportedProfileIds: [String]
+  let hardwareEncoderProfileIds: [String]
   let supportedFrameRates: [Int]
   let supportsSystemAudio: Bool
   let supportsMicrophone: Bool
@@ -56,6 +57,8 @@ struct CaptureConfigurationPayload: Codable, Sendable, Equatable {
   let width: Int
   let height: Int
   let frameRate: Int
+  let profileId: String?
+  let outputDirectory: String?
   let showsCursor: Bool
   let showsMouseClicks: Bool
   let systemAudio: Bool
@@ -70,6 +73,8 @@ struct CaptureConfiguration: Codable, Sendable, Equatable {
   let width: Int
   let height: Int
   let frameRate: Int
+  let profileId: NativeRecordingProfileId
+  let outputDirectory: String
   let showsCursor: Bool
   let showsMouseClicks: Bool
   let systemAudio: Bool
@@ -83,6 +88,8 @@ struct CaptureConfiguration: Codable, Sendable, Equatable {
     width: Int,
     height: Int,
     frameRate: Int,
+    profileId: NativeRecordingProfileId,
+    outputDirectory: String,
     showsCursor: Bool,
     showsMouseClicks: Bool,
     systemAudio: Bool,
@@ -95,6 +102,8 @@ struct CaptureConfiguration: Codable, Sendable, Equatable {
     self.width = width
     self.height = height
     self.frameRate = frameRate
+    self.profileId = profileId
+    self.outputDirectory = outputDirectory
     self.showsCursor = showsCursor
     self.showsMouseClicks = showsMouseClicks
     self.systemAudio = systemAudio
@@ -118,6 +127,16 @@ struct CaptureConfiguration: Codable, Sendable, Equatable {
     guard payload.frameRate == 30 || payload.frameRate == 60 else {
       throw NativeServiceError.invalidConfiguration("Frame rate must be 30 or 60 FPS.")
     }
+
+    guard let profileId = NativeRecordingProfileId(rawValue: payload.profileId ?? "compatible") else {
+      throw NativeServiceError.invalidConfiguration("Unsupported recording profile.")
+    }
+    let outputDirectory = payload.outputDirectory?.trimmingCharacters(in: .whitespacesAndNewlines)
+      ?? NSTemporaryDirectory()
+    guard !outputDirectory.isEmpty else {
+      throw NativeServiceError.invalidConfiguration("An output directory is required.")
+    }
+
     if payload.microphone, payload.microphoneDeviceId?.isEmpty != false {
       throw NativeServiceError.invalidConfiguration("A microphone device id is required when microphone capture is enabled.")
     }
@@ -134,6 +153,8 @@ struct CaptureConfiguration: Codable, Sendable, Equatable {
       width: payload.width,
       height: payload.height,
       frameRate: payload.frameRate,
+      profileId: profileId,
+      outputDirectory: outputDirectory,
       showsCursor: payload.showsCursor,
       showsMouseClicks: payload.showsMouseClicks,
       systemAudio: payload.systemAudio,
@@ -150,4 +171,34 @@ struct NativeHealth: Codable, Sendable, Equatable {
   let lateSamples: Int
   let pendingVideoSamples: Int
   let pendingAudioSamples: Int
+  let encodedFrames: Int
+  let processedSampleBytes: Int64
+  let pausedDurationMs: Double
+  let writerError: String?
+  let partialOutputPath: String?
+}
+
+struct NativeRecordingStart: Codable, Sendable, Equatable {
+  let profileId: String
+  let codec: String
+  let container: String
+  let hardwareEncoder: Bool
+  let partialOutputPath: String
+}
+
+struct NativeRecordingResult: Codable, Sendable, Equatable {
+  let status: String
+  let filePath: String
+  let profileId: String
+  let codec: String
+  let container: String
+  let width: Int
+  let height: Int
+  let frameRate: Int
+  let durationMs: Double
+  let pausedDurationMs: Double
+  let fileSizeBytes: Int64
+  let hasSystemAudio: Bool
+  let hasMicrophone: Bool
+  let hardwareEncoder: Bool
 }

@@ -17,6 +17,11 @@ final class CaptureDiagnostics: @unchecked Sendable {
   private var pendingAudioSamples = 0
   private var droppedFrames = 0
   private var lateSamples = 0
+  private var encodedFrames = 0
+  private var processedSampleBytes: Int64 = 0
+  private var pausedDurationMs = 0.0
+  private var writerError: String?
+  private var partialOutputPath: String?
   private var lastVideoTimestamp: Double?
   private var lastAudioTimestamp: Double?
 
@@ -74,6 +79,38 @@ final class CaptureDiagnostics: @unchecked Sendable {
     }
   }
 
+  func recordWriterDrop(sampleKind: NativeSampleKind) {
+    lock.lock()
+    defer { lock.unlock() }
+
+    if sampleKind == .video {
+      droppedFrames += 1
+    } else {
+      lateSamples += 1
+    }
+  }
+
+  func recordEncodedSample(byteCount: Int64) {
+    lock.lock()
+    defer { lock.unlock() }
+
+    encodedFrames += 1
+    processedSampleBytes += max(0, byteCount)
+  }
+
+  func setPauseDuration(milliseconds: Double) {
+    lock.lock()
+    pausedDurationMs = max(0, milliseconds)
+    lock.unlock()
+  }
+
+  func setWriterError(_ message: String?, partialOutputPath: String?) {
+    lock.lock()
+    writerError = message
+    self.partialOutputPath = partialOutputPath
+    lock.unlock()
+  }
+
 #if canImport(CoreMedia)
   func record(sampleBuffer: CMSampleBuffer, sampleKind: NativeSampleKind) {
     let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
@@ -96,7 +133,12 @@ final class CaptureDiagnostics: @unchecked Sendable {
       droppedFrames: droppedFrames,
       lateSamples: lateSamples,
       pendingVideoSamples: pendingVideoSamples,
-      pendingAudioSamples: pendingAudioSamples
+      pendingAudioSamples: pendingAudioSamples,
+      encodedFrames: encodedFrames,
+      processedSampleBytes: processedSampleBytes,
+      pausedDurationMs: pausedDurationMs,
+      writerError: writerError,
+      partialOutputPath: partialOutputPath
     )
   }
 }

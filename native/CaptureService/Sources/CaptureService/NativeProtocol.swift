@@ -90,6 +90,9 @@ enum NativeServiceError: Error, LocalizedError, Sendable {
   case invalidConfiguration(String)
   case sourceUnavailable(String)
   case captureFailure(String)
+  case encodingUnavailable(String)
+  case fileFinalizationFailed(String)
+  case recordingInterrupted(String)
   case internalFailure(String)
 
   var code: String {
@@ -108,6 +111,12 @@ enum NativeServiceError: Error, LocalizedError, Sendable {
       return "SOURCE_UNAVAILABLE"
     case .captureFailure:
       return "CAPTURE_FAILURE"
+    case .encodingUnavailable:
+      return "ENCODING_UNAVAILABLE"
+    case .fileFinalizationFailed:
+      return "FILE_FINALIZATION_FAILED"
+    case .recordingInterrupted:
+      return "RECORDING_INTERRUPTED"
     case .internalFailure:
       return "INTERNAL_FAILURE"
     }
@@ -120,6 +129,9 @@ enum NativeServiceError: Error, LocalizedError, Sendable {
       .invalidConfiguration(let message),
       .sourceUnavailable(let message),
       .captureFailure(let message),
+      .encodingUnavailable(let message),
+      .fileFinalizationFailed(let message),
+      .recordingInterrupted(let message),
       .internalFailure(let message):
       return message
     case .unsupportedProtocol(let version):

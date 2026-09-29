@@ -16,6 +16,7 @@ final class CaptureStreamCoordinator: NSObject, SCStreamDelegate, @unchecked Sen
   private var stream: SCStream?
   private var configuration: CaptureConfiguration?
   private var output: CaptureStreamOutput?
+  private var writer: RecordingAssetWriter?
 
   init(diagnostics: CaptureDiagnostics) {
     self.diagnostics = diagnostics
@@ -25,13 +26,16 @@ final class CaptureStreamCoordinator: NSObject, SCStreamDelegate, @unchecked Sen
     self.configuration = configuration
   }
 
-  func start() async throws {
+  func start() async throws -> NativeRecordingStart {
     guard let configuration else {
       throw NativeServiceError.invalidConfiguration("Capture must be configured before it starts.")
     }
+    guard stream == nil, writer == nil else {
+      throw NativeServiceError.invalidConfiguration("A capture is already in progress.")
+    }
 
-    // Source discovery and filter construction are intentionally isolated here. Phase 5 will
-    // connect these bounded outputs to AVAssetWriter without moving sample buffers through IPC.
+    let writer = try RecordingAssetWriter(configuration: configuration, diagnostics: diagnostics)
+
     let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     let filter = try makeFilter(configuration: configuration, content: content)
     let streamConfiguration = SCStreamConfiguration()
@@ -64,16 +68,22 @@ final class CaptureStreamCoordinator: NSObject, SCStreamDelegate, @unchecked Sen
     streamConfiguration.channelCount = 2
 
     let stream = SCStream(filter: filter, configuration: streamConfiguration, delegate: self)
-    let output = CaptureStreamOutput(diagnostics: diagnostics)
+    let output = CaptureStreamOutput(diagnostics: diagnostics, writer: writer)
     try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: DispatchQueue(label: "capture-service.video", qos: .userInitiated))
 
     if configuration.systemAudio {
       try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: DispatchQueue(label: "capture-service.audio", qos: .userInitiated))
     }
 
+    if configuration.microphone {
+      try stream.addStreamOutput(output, type: .microphone, sampleHandlerQueue: DispatchQueue(label: "capture-service.microphone", qos: .userInitiated))
+    }
+
     self.stream = stream
     self.output = output
+    self.writer = writer
     try await stream.startCapture()
+    return writer.startResult
   }
 
   private func makeFilter(
@@ -142,15 +152,33 @@ final class CaptureStreamCoordinator: NSObject, SCStreamDelegate, @unchecked Sen
     return UInt32(sourceId.dropFirst(prefix.count))
   }
 
-  func stop() async throws {
-    guard let stream else { return }
-    try await stream.stopCapture()
+  func stop() async throws -> NativeRecordingResult? {
+    if let stream {
+      try await stream.stopCapture()
+    }
+
+    let result = try await writer?.finish()
     self.stream = nil
     self.output = nil
+    self.writer = nil
+    return result
+  }
+
+  func pause() {
+    writer?.pause()
+  }
+
+  func resume() {
+    writer?.resume()
+  }
+
+  func recordingStart() -> NativeRecordingStart? {
+    writer?.startResult
   }
 
   func stream(_ stream: SCStream, didStopWithError error: Error) {
     NSLog("CaptureService stream stopped: %@", error.localizedDescription)
+    writer?.interrupt(message: "The capture stream stopped unexpectedly: \(error.localizedDescription)")
   }
 }
 #else
@@ -165,13 +193,16 @@ final class CaptureStreamCoordinator: @unchecked Sendable {
     self.configuration = configuration
   }
 
-  func start() async throws {
+  func start() async throws -> NativeRecordingStart {
     guard configuration != nil else {
       throw NativeServiceError.invalidConfiguration("Capture must be configured before it starts.")
     }
     throw NativeServiceError.captureFailure("ScreenCaptureKit is unavailable in this Swift SDK.")
   }
 
-  func stop() async throws {}
+  func stop() async throws -> NativeRecordingResult? { nil }
+  func pause() {}
+  func resume() {}
+  func recordingStart() -> NativeRecordingStart? { nil }
 }
 #endif

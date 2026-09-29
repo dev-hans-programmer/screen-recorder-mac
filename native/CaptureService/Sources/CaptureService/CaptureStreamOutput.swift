@@ -9,9 +9,11 @@ import ScreenCaptureKit
 
 final class CaptureStreamOutput: NSObject, SCStreamOutput {
   private let diagnostics: CaptureDiagnostics
+  private let writer: RecordingAssetWriter
 
-  init(diagnostics: CaptureDiagnostics) {
+  init(diagnostics: CaptureDiagnostics, writer: RecordingAssetWriter) {
     self.diagnostics = diagnostics
+    self.writer = writer
   }
 
   func stream(
@@ -33,6 +35,7 @@ final class CaptureStreamOutput: NSObject, SCStreamOutput {
     }
 
     diagnostics.record(sampleBuffer: sampleBuffer, sampleKind: sampleKind)
+    writer.append(sampleBuffer: sampleBuffer, sampleKind: sampleKind)
   }
 }
 #endif

@@ -52,7 +52,7 @@ actor CaptureService {
   func shutdown() async {
     guard !shouldExit else { return }
     shouldExit = true
-    try? await streamCoordinator.stop()
+    _ = try? await streamCoordinator.stop()
     state = "stopped"
   }
 
@@ -76,6 +76,8 @@ actor CaptureService {
             "requestPermissions",
             "configureCapture",
             "startCapture",
+            "pauseCapture",
+            "resumeCapture",
             "stopCapture",
             "getHealth",
             "shutdown",
@@ -117,18 +119,41 @@ actor CaptureService {
       }
       state = "capturing"
       do {
-        try await streamCoordinator.start()
+        return try encodePayload(await streamCoordinator.start())
       } catch {
         state = "failed"
         throw error
       }
+
+    case "pauseCapture":
+      guard state == "capturing" else {
+        throw NativeServiceError.invalidConfiguration("Capture must be active before it can be paused.")
+      }
+      streamCoordinator.pause()
+      state = "paused"
+      return try encodePayload(health())
+
+    case "resumeCapture":
+      guard state == "paused" else {
+        throw NativeServiceError.invalidConfiguration("Capture must be paused before it can be resumed.")
+      }
+      streamCoordinator.resume()
+      state = "capturing"
       return try encodePayload(health())
 
     case "stopCapture":
       state = "stopping"
-      try await streamCoordinator.stop()
-      state = "idle"
-      return try encodePayload(health())
+      do {
+        let result = try await streamCoordinator.stop()
+        state = "idle"
+        if let result {
+          return try encodePayload(result)
+        }
+        return try encodePayload(health())
+      } catch {
+        state = "failed"
+        throw error
+      }
 
     case "getHealth", "heartbeat":
       return try encodePayload(health())
