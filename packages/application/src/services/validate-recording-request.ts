@@ -28,8 +28,12 @@ function fitWithin(source: PixelDimensions, maximum: PixelDimensions): PixelDime
   const scale = Math.min(1, maximum.width / source.width, maximum.height / source.height);
 
   return {
-    width: Math.max(2, Math.floor(source.width * scale)),
-    height: Math.max(2, Math.floor(source.height * scale)),
+    // Video encoders and the native service require even raster dimensions.
+    width: Math.max(2, Math.floor(source.width * scale) - (Math.floor(source.width * scale) % 2)),
+    height: Math.max(
+      2,
+      Math.floor(source.height * scale) - (Math.floor(source.height * scale) % 2),
+    ),
   };
 }
 

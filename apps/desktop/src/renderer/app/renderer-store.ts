@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react';
 import type {
   AppPreferencesDto,
   AppPreferencesPatchDto,
+  CaptureRegionDto,
   CapturePermissionsDto,
   CaptureSourceDto,
   IpcEvent,
@@ -29,6 +30,22 @@ export interface RecordingProgress {
   readonly droppedFrames: number;
 }
 
+export interface RecordingOptions {
+  readonly profileId: AppPreferencesDto['defaultProfileId'];
+  readonly resolution: AppPreferencesDto['defaultResolution'];
+  readonly frameRate: AppPreferencesDto['defaultFrameRate'];
+  readonly systemAudio: boolean;
+  readonly microphone: boolean;
+  readonly showsCursor: boolean;
+  readonly showsMouseClicks: boolean;
+  readonly region: CaptureRegionDto | null;
+}
+
+export interface DiskSpaceStatus {
+  readonly availableBytes: number;
+  readonly estimatedRequiredBytes: number;
+}
+
 export interface RendererState {
   readonly activeScreen: AppScreen;
   readonly initialized: boolean;
@@ -37,9 +54,11 @@ export interface RendererState {
   readonly permissions: CapturePermissionsDto | null;
   readonly preferences: AppPreferencesDto | null;
   readonly recordings: readonly RecordingArtifactDto[];
+  readonly recordingOptions: RecordingOptions;
   readonly activeSession: RecordingSessionSnapshotDto | null;
   readonly recordingState: RecordingSessionSnapshotDto['state'] | 'idle';
   readonly progress: RecordingProgress;
+  readonly diskSpace: DiskSpaceStatus | null;
   readonly operation: Operation;
   readonly error: string | null;
   readonly notice: string | null;
@@ -53,9 +72,20 @@ const initialState: RendererState = {
   permissions: null,
   preferences: null,
   recordings: [],
+  recordingOptions: {
+    profileId: 'balanced',
+    resolution: 'source',
+    frameRate: 60,
+    systemAudio: true,
+    microphone: false,
+    showsCursor: true,
+    showsMouseClicks: false,
+    region: null,
+  },
   activeSession: null,
   recordingState: 'idle',
   progress: { durationMs: 0, encodedBytes: 0, droppedFrames: 0 },
+  diskSpace: null,
   operation: 'idle',
   error: null,
   notice: null,
@@ -84,6 +114,8 @@ export class RendererStore {
 
   private eventUnsubscribe: (() => void) | undefined;
 
+  private shortcutUnsubscribe: (() => void) | undefined;
+
   private initializationPromise: Promise<void> | undefined;
 
   public constructor(private readonly api: ScreenRecorderApi) {}
@@ -102,6 +134,7 @@ export class RendererStore {
 
     this.setState({ operation: 'initializing', error: null });
     this.eventUnsubscribe ??= this.api.onEvent((event) => this.handleEvent(event));
+    this.shortcutUnsubscribe ??= this.api.onShortcut((action) => this.handleShortcut(action));
 
     this.initializationPromise = Promise.allSettled([
       this.api.getPreferences(),
@@ -114,11 +147,16 @@ export class RendererStore {
           (result): result is PromiseRejectedResult => result.status === 'rejected',
         );
 
+        const resolvedPreferences =
+          preferences.status === 'fulfilled' ? preferences.value : this.state.preferences;
         this.setState({
-          ...(preferences.status === 'fulfilled' ? { preferences: preferences.value } : {}),
+          ...(resolvedPreferences === null ? {} : { preferences: resolvedPreferences }),
           ...(sources.status === 'fulfilled' ? this.sourceState(sources.value) : {}),
           ...(permissions.status === 'fulfilled' ? { permissions: permissions.value } : {}),
           ...(recordings.status === 'fulfilled' ? { recordings: recordings.value } : {}),
+          ...(resolvedPreferences === null
+            ? {}
+            : { recordingOptions: this.optionsFromPreferences(resolvedPreferences) }),
           initialized: true,
           operation: 'idle',
           error:
@@ -147,8 +185,16 @@ export class RendererStore {
   }
 
   public selectSource(sourceId: string): void {
-    if (this.state.sources.some((source) => source.id === sourceId)) {
-      this.setState({ selectedSourceId: sourceId, error: null });
+    const source = this.state.sources.find((candidate) => candidate.id === sourceId);
+    if (source?.isAvailable === true) {
+      this.setState({
+        selectedSourceId: sourceId,
+        recordingOptions: {
+          ...this.state.recordingOptions,
+          region: source.kind === 'display' ? this.state.recordingOptions.region : null,
+        },
+        error: null,
+      });
     }
   }
 
@@ -161,12 +207,53 @@ export class RendererStore {
     }
   }
 
+  public setRecordingOptions(patch: Partial<RecordingOptions>): void {
+    this.setState({ recordingOptions: { ...this.state.recordingOptions, ...patch }, error: null });
+  }
+
+  public async selectRegion(): Promise<void> {
+    const source = this.state.sources.find(
+      (candidate) => candidate.id === this.state.selectedSourceId,
+    );
+    if (source?.kind !== 'display') {
+      this.setState({ error: 'Select a display before choosing a region.' });
+      return;
+    }
+
+    try {
+      const region = await this.api.selectRegion(source.id);
+      if (region === null) return;
+      this.setState({
+        recordingOptions: { ...this.state.recordingOptions, region },
+        notice: 'Region selected.',
+        error: null,
+      });
+    } catch (error: unknown) {
+      this.setState({ error: errorMessage(error, 'Region selection could not be opened.') });
+    }
+  }
+
+  public clearRegion(): void {
+    this.setRecordingOptions({ region: null });
+  }
+
+  public handleShortcut(action: 'toggle-start-stop' | 'toggle-pause-resume'): void {
+    if (action === 'toggle-start-stop') {
+      if (this.state.activeSession !== null) void this.stopRecording();
+      else void this.startRecording();
+      return;
+    }
+
+    if (this.state.recordingState === 'paused') void this.resumeRecording();
+    else if (this.state.activeSession !== null) void this.pauseRecording();
+  }
+
   public async requestPermissions(): Promise<void> {
     this.setState({ operation: 'requesting-permission', error: null });
 
     try {
       const permissions = await this.api.requestCapturePermissions({
-        microphone: this.state.preferences?.microphoneEnabled ?? false,
+        microphone: this.state.recordingOptions.microphone,
       });
       this.setState({ permissions, operation: 'idle' });
     } catch (error: unknown) {
@@ -183,12 +270,15 @@ export class RendererStore {
     );
     const preferences = this.state.preferences;
 
-    if (source === undefined || preferences === null) {
+    if (source === undefined || !source.isAvailable || preferences === null) {
       this.setState({ error: 'Choose an available capture source first.' });
       return;
     }
 
-    if (this.state.permissions?.screenRecording !== 'granted') {
+    if (
+      this.state.permissions?.screenRecording !== 'granted' ||
+      (this.state.recordingOptions.microphone && this.state.permissions.microphone !== 'granted')
+    ) {
       await this.requestPermissions();
       return;
     }
@@ -198,17 +288,17 @@ export class RendererStore {
     try {
       const response = await this.api.startRecording({
         source,
-        region: null,
-        profileId: preferences.defaultProfileId,
-        resolution: preferences.defaultResolution,
-        frameRate: preferences.defaultFrameRate,
+        region: this.state.recordingOptions.region,
+        profileId: this.state.recordingOptions.profileId,
+        resolution: this.state.recordingOptions.resolution,
+        frameRate: this.state.recordingOptions.frameRate,
         audio: {
-          systemAudio: preferences.systemAudioEnabled,
-          microphone: preferences.microphoneEnabled,
+          systemAudio: this.state.recordingOptions.systemAudio,
+          microphone: this.state.recordingOptions.microphone,
           microphoneDeviceId: null,
         },
-        showsCursor: true,
-        showsMouseClicks: false,
+        showsCursor: this.state.recordingOptions.showsCursor,
+        showsMouseClicks: this.state.recordingOptions.showsMouseClicks,
       });
 
       this.setState({
@@ -219,6 +309,7 @@ export class RendererStore {
           encodedBytes: response.session.statistics.encodedBytes,
           droppedFrames: response.session.statistics.droppedFrames,
         },
+        diskSpace: null,
         operation: 'idle',
       });
     } catch (error: unknown) {
@@ -293,7 +384,11 @@ export class RendererStore {
 
     try {
       const preferences = await this.api.updatePreferences(patch);
-      this.setState({ preferences, operation: 'idle' });
+      this.setState({
+        preferences,
+        recordingOptions: this.optionsFromPreferences(preferences, this.state.recordingOptions),
+        operation: 'idle',
+      });
     } catch (error: unknown) {
       this.setState({
         operation: 'idle',
@@ -304,11 +399,35 @@ export class RendererStore {
 
   private sourceState(
     sources: readonly CaptureSourceDto[],
-  ): Pick<RendererState, 'sources' | 'selectedSourceId'> {
-    const selectedSourceId = sources.some((source) => source.id === this.state.selectedSourceId)
+  ): Pick<RendererState, 'sources' | 'selectedSourceId' | 'recordingOptions'> {
+    const selectedSourceId = sources.some(
+      (source) => source.id === this.state.selectedSourceId && source.isAvailable,
+    )
       ? this.state.selectedSourceId
-      : (sources.find((source) => source.isAvailable)?.id ?? sources[0]?.id ?? null);
-    return { sources, selectedSourceId };
+      : (sources.find((source) => source.isAvailable)?.id ?? null);
+    const selectedSource = sources.find((source) => source.id === selectedSourceId);
+    return {
+      sources,
+      selectedSourceId,
+      recordingOptions: {
+        ...this.state.recordingOptions,
+        region: selectedSource?.kind === 'display' ? this.state.recordingOptions.region : null,
+      },
+    };
+  }
+
+  private optionsFromPreferences(
+    preferences: AppPreferencesDto,
+    current: RecordingOptions = this.state.recordingOptions,
+  ): RecordingOptions {
+    return {
+      ...current,
+      profileId: preferences.defaultProfileId,
+      resolution: preferences.defaultResolution,
+      frameRate: preferences.defaultFrameRate,
+      systemAudio: preferences.systemAudioEnabled,
+      microphone: preferences.microphoneEnabled,
+    };
   }
 
   private handleEvent(event: IpcEvent): void {
@@ -339,7 +458,13 @@ export class RendererStore {
         this.setState({ notice: event.message });
         return;
       case 'recording.disk-space-warning':
-        this.setState({ notice: 'Available disk space is getting low.' });
+        this.setState({
+          diskSpace: {
+            availableBytes: event.availableBytes,
+            estimatedRequiredBytes: event.estimatedRequiredBytes,
+          },
+          notice: 'Available disk space is getting low.',
+        });
         return;
       case 'recording.completed':
         this.setState({

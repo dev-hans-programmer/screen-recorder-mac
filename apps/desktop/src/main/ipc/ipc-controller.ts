@@ -3,10 +3,12 @@ import {
   ipcChannels,
   parseIpcRequest,
   protocolVersion,
+  type AppPreferencesDto,
   type IpcRequest,
 } from '@screen-recorder/contracts';
 
 import type { ApplicationContainer } from '../application/composition-root';
+import type { RegionSelectionManager } from '../infrastructure/region-selection-manager';
 import {
   toCapturePermissionsDto,
   toCaptureSourceDto,
@@ -73,6 +75,8 @@ function getCommand(value: unknown): string {
 export function registerIpcController(
   getMainWindow: () => BrowserWindow | null,
   container: ApplicationContainer,
+  regionSelection?: RegionSelectionManager,
+  onPreferencesUpdated?: (preferences: AppPreferencesDto) => void,
 ): void {
   ipcMain.handle(ipcChannels.command, async (event, rawRequest: unknown) => {
     const requestId = getRequestId(rawRequest);
@@ -80,7 +84,11 @@ export function registerIpcController(
 
     const mainWindow = getMainWindow();
 
-    if (mainWindow === null || event.sender !== mainWindow.webContents) {
+    const trustedSender =
+      (mainWindow !== null && event.sender === mainWindow.webContents) ||
+      regionSelection?.isOverlayWindow(event.sender) === true;
+
+    if (!trustedSender) {
       return failureResponse(requestId, command, {
         code: 'UNTRUSTED_IPC_SENDER',
         message: 'The IPC sender is not the active application window.',
@@ -96,7 +104,7 @@ export function registerIpcController(
     }
 
     try {
-      return await dispatchRequest(request, container);
+      return await dispatchRequest(request, container, regionSelection, onPreferencesUpdated);
     } catch (error) {
       container.logger.error('IPC command failed.', { command: request.command });
       return failureResponse(request.requestId, request.command, error);
@@ -107,6 +115,8 @@ export function registerIpcController(
 async function dispatchRequest(
   request: IpcRequest,
   container: ApplicationContainer,
+  regionSelection?: RegionSelectionManager,
+  onPreferencesUpdated?: (preferences: AppPreferencesDto) => void,
 ): Promise<Record<string, unknown>> {
   switch (request.command) {
     case 'capture.list-sources':
@@ -126,6 +136,11 @@ async function dispatchRequest(
           await container.useCases.requestCapturePermissions.execute(request.payload),
         ),
       );
+    case 'capture.select-region':
+      if (regionSelection === undefined) {
+        throw new Error('Region selection is unavailable.');
+      }
+      return successResponse(request, await regionSelection.open(request.payload.displayId));
     case 'recording.validate-request': {
       const validation = await container.useCases.validateRecordingRequest.execute(
         toRecordingRequest(request.payload.request),
@@ -164,15 +179,15 @@ async function dispatchRequest(
         request,
         toPreferencesDto(await container.useCases.getPreferences.execute()),
       );
-    case 'preferences.update':
-      return successResponse(
-        request,
-        toPreferencesDto(
-          await container.useCases.updatePreferences.execute(
-            toPreferencesPatch(request.payload.patch),
-          ),
+    case 'preferences.update': {
+      const preferences = toPreferencesDto(
+        await container.useCases.updatePreferences.execute(
+          toPreferencesPatch(request.payload.patch),
         ),
       );
+      onPreferencesUpdated?.(preferences);
+      return successResponse(request, preferences);
+    }
   }
 
   throw new Error('Unsupported IPC command.');

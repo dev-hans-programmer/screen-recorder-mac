@@ -47,6 +47,106 @@ final class RecordingAssetWriter: @unchecked Sendable {
   private var failureMessage: String?
   private var completedResult: NativeRecordingResult?
 
+  private func describeWriterError(_ error: Error?) -> String {
+    guard let error else {
+      return "The recording writer failed without providing an error."
+    }
+
+    let nsError = error as NSError
+    var message = "\(nsError.localizedDescription) (domain: \(nsError.domain), code: \(nsError.code))"
+    if let failureReason = nsError.localizedFailureReason, !failureReason.isEmpty {
+      message += " Reason: \(failureReason)."
+    }
+    if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+      message += " Underlying: \(underlyingError.localizedDescription) (domain: \(underlyingError.domain), code: \(underlyingError.code))."
+    }
+    return message
+  }
+
+  private func describeSampleTiming(_ sampleBuffer: CMSampleBuffer) -> String {
+    var timingCount = 0
+    guard CMSampleBufferGetSampleTimingInfoArray(
+      sampleBuffer,
+      entryCount: 0,
+      arrayToFill: nil,
+      entriesNeededOut: &timingCount
+    ) == noErr, timingCount > 0 else {
+      return "timing unavailable"
+    }
+
+    var timingInfo = [CMSampleTimingInfo](
+      repeating: CMSampleTimingInfo(
+        duration: .invalid,
+        presentationTimeStamp: .invalid,
+        decodeTimeStamp: .invalid
+      ),
+      count: timingCount
+    )
+    guard CMSampleBufferGetSampleTimingInfoArray(
+      sampleBuffer,
+      entryCount: timingCount,
+      arrayToFill: &timingInfo,
+      entriesNeededOut: &timingCount
+    ) == noErr else {
+      return "timing unavailable"
+    }
+
+    return timingInfo.enumerated().map { index, timing in
+      "#\(index) pts=\(timing.presentationTimeStamp.value)/\(timing.presentationTimeStamp.timescale) duration=\(timing.duration.value)/\(timing.duration.timescale) dts=\(timing.decodeTimeStamp.value)/\(timing.decodeTimeStamp.timescale)"
+    }.joined(separator: ", ")
+  }
+
+  private func sampleBufferWithValidVideoTiming(
+    _ sampleBuffer: CMSampleBuffer
+  ) -> CMSampleBuffer? {
+    var timingCount = 0
+    guard CMSampleBufferGetSampleTimingInfoArray(
+      sampleBuffer,
+      entryCount: 0,
+      arrayToFill: nil,
+      entriesNeededOut: &timingCount
+    ) == noErr, timingCount > 0 else {
+      return nil
+    }
+
+    var timingInfo = [CMSampleTimingInfo](
+      repeating: CMSampleTimingInfo(
+        duration: .invalid,
+        presentationTimeStamp: .invalid,
+        decodeTimeStamp: .invalid
+      ),
+      count: timingCount
+    )
+    guard CMSampleBufferGetSampleTimingInfoArray(
+      sampleBuffer,
+      entryCount: timingCount,
+      arrayToFill: &timingInfo,
+      entriesNeededOut: &timingCount
+    ) == noErr else {
+      return nil
+    }
+
+    let frameDuration = CMTime(value: 1, timescale: CMTimeScale(configuration.frameRate))
+    for index in timingInfo.indices {
+      guard timingInfo[index].presentationTimeStamp.isValid else { return nil }
+      if !timingInfo[index].duration.isValid || timingInfo[index].duration <= .zero {
+        timingInfo[index].duration = frameDuration
+      }
+    }
+
+    var copiedSampleBuffer: CMSampleBuffer?
+    guard CMSampleBufferCreateCopyWithNewTiming(
+      allocator: nil,
+      sampleBuffer: sampleBuffer,
+      sampleTimingEntryCount: timingInfo.count,
+      sampleTimingArray: &timingInfo,
+      sampleBufferOut: &copiedSampleBuffer
+    ) == noErr else {
+      return nil
+    }
+    return copiedSampleBuffer
+  }
+
   init(configuration: CaptureConfiguration, diagnostics: CaptureDiagnostics) throws {
     self.configuration = configuration
     self.diagnostics = diagnostics
@@ -212,10 +312,12 @@ final class RecordingAssetWriter: @unchecked Sendable {
     if sampleKind == .video, !hasStartedWriting {
       writer.startWriting()
       guard writer.status == .writing else {
-        failOnQueue(message: writer.error?.localizedDescription ?? "The video encoder failed to start.")
+        failOnQueue(message: describeWriterError(writer.error))
         return
       }
-      writer.startSession(atSourceTime: sourceTimestamp)
+      // ScreenCaptureKit timestamps use the host clock. The writer receives a zero-based
+      // timeline below instead, which avoids carrying that large clock origin into the file.
+      writer.startSession(atSourceTime: .zero)
       hasStartedWriting = true
       sessionStartTime = sourceTimestamp
     }
@@ -236,11 +338,28 @@ final class RecordingAssetWriter: @unchecked Sendable {
       self.pauseStartedAt = nil
     }
 
-    let offset = CMTime(seconds: totalPausedDurationSeconds, preferredTimescale: 600)
-    let adjustedSampleBuffer = adjustedSampleBuffer(sampleBuffer, subtracting: offset)
-    guard let adjustedSampleBuffer else {
+    guard let sessionStartTime else {
       diagnostics.recordWriterDrop(sampleKind: sampleKind)
       return
+    }
+
+    let pauseOffset = CMTime(seconds: totalPausedDurationSeconds, preferredTimescale: 600)
+    let offset = CMTimeAdd(sessionStartTime, pauseOffset)
+    let retimedSampleBuffer = adjustedSampleBuffer(sampleBuffer, subtracting: offset)
+    guard let retimedSampleBuffer else {
+      diagnostics.recordWriterDrop(sampleKind: sampleKind)
+      return
+    }
+
+    let adjustedSampleBuffer: CMSampleBuffer
+    if sampleKind == .video {
+      guard let videoSampleBuffer = sampleBufferWithValidVideoTiming(retimedSampleBuffer) else {
+        diagnostics.recordWriterDrop(sampleKind: sampleKind)
+        return
+      }
+      adjustedSampleBuffer = videoSampleBuffer
+    } else {
+      adjustedSampleBuffer = retimedSampleBuffer
     }
 
     let adjustedTimestamp = CMSampleBufferGetPresentationTimeStamp(adjustedSampleBuffer)
@@ -276,7 +395,9 @@ final class RecordingAssetWriter: @unchecked Sendable {
     }
 
     guard input.append(adjustedSampleBuffer) else {
-      failOnQueue(message: writer.error?.localizedDescription ?? "The encoder rejected a media sample.")
+      failOnQueue(
+        message: "\(describeWriterError(writer.error)) Sample timing: \(describeSampleTiming(adjustedSampleBuffer))."
+      )
       return
     }
 
@@ -320,6 +441,13 @@ final class RecordingAssetWriter: @unchecked Sendable {
       return
     }
 
+    if let lastVideoTimestamp {
+      let endTime = CMTimeAdd(
+        lastVideoTimestamp,
+        CMTime(value: 1, timescale: CMTimeScale(configuration.frameRate))
+      )
+      writer.endSession(atSourceTime: endTime)
+    }
     videoInput.markAsFinished()
     systemAudioInput?.markAsFinished()
     microphoneInput?.markAsFinished()
@@ -331,7 +459,7 @@ final class RecordingAssetWriter: @unchecked Sendable {
       }
       self.queue.async {
         guard self.writer.status == .completed else {
-          let message = self.writer.error?.localizedDescription ?? "The recording could not be finalized."
+          let message = self.describeWriterError(self.writer.error)
           self.diagnostics.setWriterError(message, partialOutputPath: self.partialURL.path)
           continuation.resume(throwing: NativeServiceError.fileFinalizationFailed(message))
           return
@@ -382,8 +510,8 @@ final class RecordingAssetWriter: @unchecked Sendable {
   }
 
   private func durationSecondsOnQueue() -> Double {
-    guard let start = sessionStartTime, let end = lastVideoTimestamp else { return 0 }
-    let duration = CMTimeGetSeconds(CMTimeSubtract(end, start))
+    guard let start = sessionStartTime, let end = lastSourceVideoTimestamp else { return 0 }
+    let duration = CMTimeGetSeconds(CMTimeSubtract(end, start)) - totalPausedDurationSeconds
     return duration.isFinite ? max(0, duration) : 0
   }
 

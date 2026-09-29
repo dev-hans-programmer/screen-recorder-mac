@@ -71,4 +71,49 @@ describe('secure preload API', () => {
     expect(events).toEqual(['recording.progress']);
     expect(removedListener).toBe(registeredListener);
   });
+
+  it('keeps region selection and shortcut channels purpose-built', async () => {
+    const calls: unknown[] = [];
+    const sent: unknown[] = [];
+    const api = createScreenRecorderApi(
+      {
+        invoke: async (channel, request) => {
+          calls.push({ channel, request });
+          const typedRequest = request as { readonly requestId: string; readonly command: string };
+          return {
+            protocolVersion,
+            requestId: typedRequest.requestId,
+            command: typedRequest.command,
+            ok: true,
+            data: null,
+          };
+        },
+        send: (channel, payload) => sent.push({ channel, payload }),
+        on: () => undefined,
+        removeListener: () => undefined,
+      },
+      () => 'region-request',
+    );
+
+    await expect(api.selectRegion('display:1')).resolves.toBeNull();
+    api.submitRegionSelection({ x: 10, y: 20, width: 400, height: 300 });
+    api.cancelRegionSelection();
+
+    expect(calls[0]).toEqual({
+      channel: ipcChannels.command,
+      request: {
+        protocolVersion,
+        requestId: 'region-request',
+        command: 'capture.select-region',
+        payload: { displayId: 'display:1' },
+      },
+    });
+    expect(sent).toEqual([
+      {
+        channel: ipcChannels.regionSelection,
+        payload: { type: 'selected', region: { x: 10, y: 20, width: 400, height: 300 } },
+      },
+      { channel: ipcChannels.regionSelection, payload: { type: 'cancelled' } },
+    ]);
+  });
 });

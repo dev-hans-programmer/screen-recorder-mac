@@ -159,6 +159,9 @@ export class NativeRecordingEngine implements RecordingEnginePort {
         ...active,
         progressTimer: setInterval(() => void this.publishProgress(), this.progressIntervalMs),
       };
+      // Publish once immediately so the renderer does not wait for the first polling interval
+      // before it receives a live duration/byte snapshot.
+      void this.publishProgress();
       return { id: sessionId };
     } catch (error) {
       this.supervisor.releaseRecording(sessionId);

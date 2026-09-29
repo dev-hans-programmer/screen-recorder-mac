@@ -1,12 +1,14 @@
 import type {
   AppPreferencesDto,
   AppPreferencesPatchDto,
+  CaptureRegionDto,
   CapturePermissionsDto,
   CaptureSourceDto,
   IpcEvent,
   IpcResponse,
   RecordingArtifactDto,
   RecordingRequestDto,
+  ShortcutAction,
 } from '@screen-recorder/contracts';
 
 type ValidatedRecordingRequestDto = IpcResponse<'recording.validate-request'>['data'];
@@ -18,6 +20,9 @@ export interface ScreenRecorderApi {
   requestCapturePermissions(request: {
     readonly microphone: boolean;
   }): Promise<CapturePermissionsDto>;
+  selectRegion(displayId: string): Promise<CaptureRegionDto | null>;
+  submitRegionSelection(region: CaptureRegionDto): void;
+  cancelRegionSelection(): void;
   validateRecordingRequest(request: RecordingRequestDto): Promise<ValidatedRecordingRequestDto>;
   startRecording(request: RecordingRequestDto): Promise<StartRecordingResponseDto>;
   pauseRecording(sessionId: string): Promise<void>;
@@ -27,6 +32,7 @@ export interface ScreenRecorderApi {
   getPreferences(): Promise<AppPreferencesDto>;
   updatePreferences(patch: AppPreferencesPatchDto): Promise<AppPreferencesDto>;
   onEvent(listener: (event: IpcEvent) => void): () => void;
+  onShortcut(listener: (action: ShortcutAction) => void): () => void;
 }
 
 declare global {

@@ -9,6 +9,23 @@ import {
 } from './capture-service-client';
 import type { NativeCommand } from './native-service-protocol';
 
+const retryableIdleCommands = new Set<NativeCommand>([
+  'getCapabilities',
+  'listSources',
+  'getPermissions',
+  'getHealth',
+  'heartbeat',
+]);
+
+function isNativeRequestTimeout(error: unknown): error is NativeServiceClientError {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'NATIVE_REQUEST_TIMEOUT'
+  );
+}
+
 export interface NativeServiceSupervisorOptions extends NativeServiceClientOptions {
   readonly onFailure?: (failure: NativeServiceFailure & { readonly sessionId?: string }) => void;
 }
@@ -32,7 +49,15 @@ export class NativeServiceSupervisor {
     this.client = new CaptureServiceClient({
       ...clientOptions,
       onFailure: (failure) => {
-        const enrichedFailure = { ...failure, sessionId: this.activeSessionId };
+        const sessionId = this.recordingSessionId;
+
+        // Read-only idle requests are retried once below. Do not flash a native-service failure in
+        // the UI unless the retry also fails and is returned through the original IPC operation.
+        if (failure.error.code === 'NATIVE_REQUEST_TIMEOUT' && sessionId === undefined) {
+          return;
+        }
+
+        const enrichedFailure = { ...failure, sessionId };
         onFailure?.(enrichedFailure);
         for (const listener of this.failureListeners) {
           listener(enrichedFailure);
@@ -52,27 +77,42 @@ export class NativeServiceSupervisor {
     return () => this.failureListeners.delete(listener);
   }
 
-  public request<TResponse = unknown>(
+  public async request<TResponse = unknown>(
     command: NativeCommand,
     payload: unknown = null,
     options?: NativeRequestOptions,
   ): Promise<TResponse> {
     if (this.disposed) {
-      return Promise.reject(
-        new DomainError('NATIVE_SERVICE_FAILURE', 'The native capture service has been disposed.'),
+      throw new DomainError(
+        'NATIVE_SERVICE_FAILURE',
+        'The native capture service has been disposed.',
       );
     }
 
     if (this.recordingSessionId !== undefined && !this.client.running) {
-      return Promise.reject(
-        new DomainError(
-          'HELPER_FAILURE',
-          'CaptureService stopped during a recording and will not be restarted automatically.',
-        ),
+      throw new DomainError(
+        'HELPER_FAILURE',
+        'CaptureService stopped during a recording and will not be restarted automatically.',
       );
     }
 
-    return this.client.request<TResponse>(command, payload, options);
+    try {
+      return await this.client.request<TResponse>(command, payload, options);
+    } catch (error) {
+      const canRetry =
+        this.recordingSessionId === undefined &&
+        retryableIdleCommands.has(command) &&
+        isNativeRequestTimeout(error) &&
+        !options?.signal?.aborted;
+
+      if (!canRetry) {
+        throw error;
+      }
+
+      // The client disposes the timed-out process before rejecting, so this request starts a clean
+      // helper. Mutating recording commands are intentionally never replayed.
+      return this.client.request<TResponse>(command, payload, options);
+    }
   }
 
   public reserveRecording(sessionId: string): void {

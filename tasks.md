@@ -369,13 +369,13 @@ A task is complete when:
 
 ## Phase 8 — Source selection and recording controls
 
-- [ ] T080 Implement source picker screen.
+- [x] T080 Implement source picker screen.
   - Display sources with names, icons, dimensions, and type.
   - Add refresh behavior.
   - Handle sources disappearing.
   - Acceptance: display, window, and application sources can be selected.
 
-- [ ] T081 Implement region-selection overlay.
+- [x] T081 Implement region-selection overlay.
   - Add transparent always-on-top selection window.
   - Support drag selection and keyboard adjustment.
   - Display pixel dimensions and aspect ratio.
@@ -383,7 +383,7 @@ A task is complete when:
   - Ensure the overlay is excluded from the recording.
   - Acceptance: selected regions align correctly on Retina and multi-monitor displays.
 
-- [ ] T082 Implement recording configuration controls.
+- [x] T082 Implement recording configuration controls.
   - Add quality profile selection.
   - Add resolution selection.
   - Add FPS selection.
@@ -392,7 +392,7 @@ A task is complete when:
   - Add output location selection.
   - Acceptance: controls produce validated native recording requests.
 
-- [ ] T083 Implement recording control surface.
+- [x] T083 Implement recording control surface.
   - Add start, pause, resume, and stop.
   - Add elapsed timer.
   - Add current profile and source summary.
@@ -400,7 +400,7 @@ A task is complete when:
   - Add dropped-frame warning state.
   - Acceptance: controls remain responsive throughout a recording.
 
-- [ ] T084 Implement global shortcuts and menu-bar controls.
+- [x] T084 Implement global shortcuts and menu-bar controls.
   - Add configurable start/stop shortcut.
   - Add pause/resume shortcut.
   - Add menu-bar status item.

@@ -20,6 +20,25 @@ describe('IPC contracts', () => {
     expect(request.command).toBe('capture.request-permissions');
   });
 
+  it('validates region selection requests and responses', () => {
+    const request = parseIpcRequest({
+      protocolVersion,
+      requestId: 'region-request',
+      command: 'capture.select-region',
+      payload: { displayId: 'display:1' },
+    });
+    const response = parseIpcResponse('capture.select-region', {
+      protocolVersion,
+      requestId: 'region-request',
+      command: 'capture.select-region',
+      ok: true,
+      data: { x: 10, y: 20, width: 400, height: 300 },
+    });
+
+    expect(request.command).toBe('capture.select-region');
+    expect(response.data?.width).toBe(400);
+  });
+
   it('rejects invalid commands before application services can receive them', () => {
     expect(() =>
       parseIpcRequest({

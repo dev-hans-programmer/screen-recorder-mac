@@ -5,6 +5,8 @@ export const protocolVersion = 1 as const;
 export const ipcChannels = Object.freeze({
   command: 'screen-recorder:command',
   event: 'screen-recorder:event',
+  regionSelection: 'screen-recorder:region-selection',
+  shortcut: 'screen-recorder:shortcut',
 });
 
 const identifierSchema = z.string().min(1).max(128);
@@ -17,7 +19,7 @@ const pixelDimensionsSchema = z
   })
   .strict();
 
-const captureRegionSchema = z
+export const captureRegionSchema = z
   .object({
     x: z.number().finite(),
     y: z.number().finite(),
@@ -166,6 +168,18 @@ const appPreferencesPatchSchema = z
 const emptyPayloadSchema = z.object({}).strict();
 const sessionIdPayloadSchema = z.object({ sessionId: identifierSchema }).strict();
 const recordingRequestPayloadSchema = z.object({ request: recordingRequestSchema }).strict();
+const selectRegionPayloadSchema = z.object({ displayId: identifierSchema }).strict();
+
+export const shortcutMessageSchema = z
+  .object({
+    action: z.enum(['toggle-start-stop', 'toggle-pause-resume']),
+  })
+  .strict();
+
+export const regionSelectionMessageSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('selected'), region: captureRegionSchema }).strict(),
+  z.object({ type: z.literal('cancelled') }).strict(),
+]);
 
 const requestSchema = <C extends string, T extends z.ZodType>(command: C, payload: T) =>
   z
@@ -181,6 +195,7 @@ export const ipcRequestSchema = z.discriminatedUnion('command', [
   requestSchema('capture.list-sources', emptyPayloadSchema),
   requestSchema('capture.get-permissions', emptyPayloadSchema),
   requestSchema('capture.request-permissions', z.object({ microphone: z.boolean() }).strict()),
+  requestSchema('capture.select-region', selectRegionPayloadSchema),
   requestSchema('recording.validate-request', recordingRequestPayloadSchema),
   requestSchema('recording.start', recordingRequestPayloadSchema),
   requestSchema('recording.pause', sessionIdPayloadSchema),
@@ -206,6 +221,7 @@ const responseDataSchemas = {
   'capture.list-sources': z.array(captureSourceSchema),
   'capture.get-permissions': capturePermissionsSchema,
   'capture.request-permissions': capturePermissionsSchema,
+  'capture.select-region': captureRegionSchema.nullable(),
   'recording.validate-request': validatedRecordingRequestSchema,
   'recording.start': z
     .object({
@@ -422,9 +438,11 @@ export function parseIpcEvent(value: unknown): IpcEvent {
 }
 
 export type CaptureSourceDto = z.infer<typeof captureSourceSchema>;
+export type CaptureRegionDto = z.infer<typeof captureRegionSchema>;
 export type CapturePermissionsDto = z.infer<typeof capturePermissionsSchema>;
 export type RecordingRequestDto = z.infer<typeof recordingRequestSchema>;
 export type AppPreferencesDto = z.infer<typeof appPreferencesSchema>;
 export type AppPreferencesPatchDto = z.infer<typeof appPreferencesPatchSchema>;
 export type RecordingArtifactDto = z.infer<typeof recordingArtifactSchema>;
 export type RecordingSessionSnapshotDto = z.infer<typeof recordingSessionSnapshotSchema>;
+export type ShortcutAction = z.infer<typeof shortcutMessageSchema>['action'];

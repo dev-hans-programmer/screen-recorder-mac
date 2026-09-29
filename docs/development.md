@@ -45,13 +45,14 @@ Copy `apps/desktop/.env.example` to a local `.env` file only when needed. Do not
 | `SCREEN_RECORDER_LOG_LEVEL` | `silent`, `error`, `warn`, `info`, `debug` | `info`  | Controls future main-process logging       |
 | `SCREEN_RECORDER_DEVTOOLS`  | `0`, `1`                                   | `0`     | Opens Chromium DevTools during development |
 
-## Expected Phase 7 behavior
+## Expected Phase 8 behavior
 
 The app opens a responsive recorder workspace with Recorder, Library, and Settings navigation. The
-workspace loads native capture sources, shows Screen Recording permission state, supports theme and
-quality defaults, and keeps recording progress in a renderer external store so progress events do
-not rerender the entire shell. Capture controls use the typed `window.screenRecorder` bridge; raw
-video and audio frames never cross into React.
+workspace loads native capture sources, supports display/window/application selection, region
+selection on Retina displays, per-recording quality and audio controls, pause/resume/stop, global
+shortcuts, and a menu-bar control. Capture controls use the typed `window.screenRecorder` bridge;
+raw video and audio frames never cross into React. The native helper remains responsible for capture,
+encoding, disk diagnostics, and finalization.
 
 See [security.md](security.md) for the Electron boundary and IPC rules.
 

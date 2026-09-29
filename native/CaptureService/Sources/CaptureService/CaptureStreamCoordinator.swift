@@ -59,6 +59,7 @@ final class CaptureStreamCoordinator: NSObject, SCStreamDelegate, @unchecked Sen
     if #available(macOS 15.0, *) {
       streamConfiguration.showMouseClicks = configuration.showsMouseClicks
       streamConfiguration.captureMicrophone = configuration.microphone
+      // A nil device id delegates microphone selection to the system default input device.
       streamConfiguration.microphoneCaptureDeviceID = configuration.microphoneDeviceId
       streamConfiguration.captureDynamicRange = .SDR
     }

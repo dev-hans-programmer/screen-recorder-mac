@@ -9,6 +9,8 @@ import {
 import { loadRuntimeConfig } from './infrastructure/runtime-config';
 import { createLifecycleManager, type LifecycleManager } from './infrastructure/lifecycle-manager';
 import { resolveCaptureServicePath } from './infrastructure/native/native-service-path';
+import { DesktopControls } from './infrastructure/desktop-controls';
+import { RegionSelectionManager } from './infrastructure/region-selection-manager';
 import { createWindowEventPublisher } from './ipc/ipc-event-publisher';
 import { registerIpcController } from './ipc/ipc-controller';
 import { buildContentSecurityPolicy, isAllowedRendererUrl } from './security/security-policy';
@@ -19,6 +21,8 @@ let applicationContainer: ApplicationContainer | null = null;
 let lifecycleManager: LifecycleManager | null = null;
 let ipcControllerRegistered = false;
 let shutdownRequested = false;
+let regionSelectionManager: RegionSelectionManager | null = null;
+let desktopControls: DesktopControls | null = null;
 
 function createMainWindow(): void {
   const packagedRendererRootUrl = pathToFileURL(path.join(__dirname, '../renderer/')).href;
@@ -63,6 +67,15 @@ function createMainWindow(): void {
     const events = createWindowEventPublisher((channel, event) => {
       mainWindow?.webContents.send(channel, event);
     });
+    regionSelectionManager = new RegionSelectionManager({
+      preloadPath: path.join(__dirname, 'preload.js'),
+      devServerUrl: MAIN_WINDOW_VITE_DEV_SERVER_URL,
+      packagedRendererFile: path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
+    });
+    desktopControls = new DesktopControls({
+      getMainWindow: () => mainWindow,
+      onWarning: (message) => console.warn(`[screen-recorder] ${message}`),
+    });
     applicationContainer = createApplicationContainer(events, {
       nativeServicePath: resolveCaptureServicePath({
         isPackaged: app.isPackaged,
@@ -74,14 +87,24 @@ function createMainWindow(): void {
       }),
       defaultOutputDirectory: () => path.join(app.getPath('videos'), 'Screen Recorder'),
     });
-    lifecycleManager = createLifecycleManager(
-      () => applicationContainer?.dispose() ?? Promise.resolve(),
-    );
+    lifecycleManager = createLifecycleManager(async () => {
+      desktopControls?.dispose();
+      regionSelectionManager?.dispose();
+      await applicationContainer?.dispose();
+    });
   }
 
   if (!ipcControllerRegistered && applicationContainer !== null) {
-    registerIpcController(() => mainWindow, applicationContainer);
+    registerIpcController(
+      () => mainWindow,
+      applicationContainer,
+      regionSelectionManager ?? undefined,
+      (preferences) => desktopControls?.update(preferences.shortcuts),
+    );
     ipcControllerRegistered = true;
+    void applicationContainer.useCases.getPreferences.execute().then((preferences) => {
+      desktopControls?.register(preferences.shortcuts);
+    });
   }
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {

@@ -54,6 +54,7 @@ struct SourceDiscovery: Sendable {
 
 #if canImport(ScreenCaptureKit)
   private func contentSources(_ content: SCShareableContent) -> [NativeSource] {
+    let referenceDisplay = content.displays.first
     let displays = content.displays.map { display in
       let scaleFactor = displayScaleFactor(display.displayID, pixelWidth: display.width)
       return NativeSource(
@@ -86,9 +87,13 @@ struct SourceDiscovery: Sendable {
         id: "application:\(applicationIdentifier)",
         kind: "application",
         name: application.applicationName.isEmpty ? applicationIdentifier : application.applicationName,
-        width: nil,
-        height: nil,
-        scaleFactor: nil,
+        // Application filters are rendered from a display. Use that display's pixel envelope
+        // so the application layer can validate a request before the native stream starts.
+        width: referenceDisplay?.width,
+        height: referenceDisplay?.height,
+        scaleFactor: referenceDisplay.map {
+          displayScaleFactor($0.displayID, pixelWidth: $0.width)
+        } ?? nil,
         isAvailable: true
       )
     }

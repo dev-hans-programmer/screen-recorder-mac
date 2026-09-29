@@ -205,6 +205,7 @@ describe('native bridge infrastructure', () => {
     expect(requestSpy.mock.calls.map(([command]) => command)).toEqual([
       'configureCapture',
       'startCapture',
+      'getHealth',
       'pauseCapture',
       'resumeCapture',
       'stopCapture',

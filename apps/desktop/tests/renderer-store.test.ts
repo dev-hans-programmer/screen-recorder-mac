@@ -108,6 +108,9 @@ function createApi() {
     listCaptureSources: vi.fn(async () => [source]),
     getCapturePermissions: vi.fn(async () => permissions),
     requestCapturePermissions: vi.fn(async () => permissions),
+    selectRegion: vi.fn(async () => null),
+    submitRegionSelection: vi.fn(),
+    cancelRegionSelection: vi.fn(),
     validateRecordingRequest: vi.fn(async () => validation),
     startRecording: vi.fn(async () => ({ session, validation })),
     pauseRecording: vi.fn(async () => undefined),
@@ -129,6 +132,7 @@ function createApi() {
         eventListener = undefined;
       };
     }),
+    onShortcut: vi.fn(() => () => undefined),
   };
 
   return {
@@ -199,5 +203,52 @@ describe('RendererStore', () => {
     expect(store.getState().activeSession).toBeNull();
     expect(store.getState().recordings[0]).toEqual(artifact);
     expect(store.getState().recordingState).toBe('completed');
+  });
+
+  it('keeps region and capture controls in the native recording request', async () => {
+    const fixture = createApi();
+    const store = new RendererStore(fixture.api);
+
+    await store.initialize();
+    store.setRecordingOptions({
+      region: { x: 40, y: 30, width: 1280, height: 720 },
+      profileId: 'compatible',
+      resolution: '1080p',
+      frameRate: 30,
+      systemAudio: false,
+      microphone: true,
+      showsCursor: false,
+      showsMouseClicks: true,
+    });
+    vi.mocked(fixture.api.requestCapturePermissions).mockResolvedValue({
+      screenRecording: 'granted',
+      microphone: 'granted',
+    });
+    await store.startRecording();
+    await store.startRecording();
+
+    expect(fixture.api.startRecording).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: { x: 40, y: 30, width: 1280, height: 720 },
+        profileId: 'compatible',
+        resolution: '1080p',
+        frameRate: 30,
+        audio: { systemAudio: false, microphone: true, microphoneDeviceId: null },
+        showsCursor: false,
+        showsMouseClicks: true,
+      }),
+    );
+  });
+
+  it('clears a selected source when a refresh reports that it disappeared', async () => {
+    const fixture = createApi();
+    const store = new RendererStore(fixture.api);
+
+    await store.initialize();
+    vi.mocked(fixture.api.listCaptureSources).mockResolvedValueOnce([]);
+    await store.refreshSources();
+
+    expect(store.getState().sources).toEqual([]);
+    expect(store.getState().selectedSourceId).toBeNull();
   });
 });

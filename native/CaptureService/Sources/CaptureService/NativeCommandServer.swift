@@ -3,7 +3,6 @@ import OSLog
 
 public struct NativeCommandServer {
   private let service: CaptureService
-  private let logger = Logger(subsystem: "com.screenrecorder.capture-service", category: "protocol")
 
   public init() {
     self.service = CaptureService()
@@ -14,23 +13,39 @@ public struct NativeCommandServer {
   }
 
   public func run() async {
-    while let line = readLine(strippingNewline: true) {
-      let response = await service.handleLine(line)
-      write(response)
+    let service = self.service
+    let writer = NativeResponseWriter()
 
-      if await service.isExitRequested() {
-        break
+    // ScreenCaptureKit discovery and startup calls can occasionally take several seconds. Keep
+    // reading the protocol while one request is suspended so lightweight requests such as
+    // getPermissions and getHealth are not trapped behind it.
+    await withTaskGroup(of: Void.self) { group in
+      while let line = readLine(strippingNewline: true) {
+        group.addTask {
+          let response = await service.handleLine(line)
+          await writer.write(response)
+        }
       }
     }
 
     await service.shutdown()
   }
+}
 
-  private func write(_ response: NativeResponse) {
+/// Serializes stdout writes from concurrently handled commands so each response remains one
+/// complete newline-delimited JSON message.
+private actor NativeResponseWriter {
+  private let logger = Logger(
+    subsystem: "com.screenrecorder.capture-service",
+    category: "protocol"
+  )
+
+  func write(_ response: NativeResponse) {
     do {
       let data = try JSONEncoder().encode(response)
-      FileHandle.standardOutput.write(data)
-      FileHandle.standardOutput.write(Data([0x0a]))
+      var message = data
+      message.append(0x0a)
+      FileHandle.standardOutput.write(message)
     } catch {
       logger.error("Unable to encode response: \(error.localizedDescription, privacy: .public)")
     }

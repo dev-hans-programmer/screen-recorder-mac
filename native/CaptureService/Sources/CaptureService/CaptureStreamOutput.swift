@@ -25,6 +25,10 @@ final class CaptureStreamOutput: NSObject, SCStreamOutput {
 
     switch type {
     case .screen:
+      guard isRecordableVideoFrame(sampleBuffer) else {
+        diagnostics.recordWriterDrop(sampleKind: .video)
+        return
+      }
       sampleKind = .video
     case .audio:
       sampleKind = .audio
@@ -36,6 +40,26 @@ final class CaptureStreamOutput: NSObject, SCStreamOutput {
 
     diagnostics.record(sampleBuffer: sampleBuffer, sampleKind: sampleKind)
     writer.append(sampleBuffer: sampleBuffer, sampleKind: sampleKind)
+  }
+
+  private func isRecordableVideoFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {
+    guard
+      let attachmentsArray = CMSampleBufferGetSampleAttachmentsArray(
+        sampleBuffer,
+        createIfNecessary: false
+      ) as? [[SCStreamFrameInfo: Any]],
+      let attachments = attachmentsArray.first,
+      let statusRawValue = attachments[SCStreamFrameInfo.status] as? Int,
+      let status = SCFrameStatus(rawValue: statusRawValue)
+    else {
+      // Older SDK/runtime combinations may not expose frame status metadata. The writer still
+      // validates the sample buffer itself, so preserve compatibility when the metadata is absent.
+      return true
+    }
+
+    // Idle, blank, suspended, and stopped frames do not contain a new recordable image. Passing
+    // them to AVAssetWriter can produce invalid timing/data errors after a few successful frames.
+    return status == .complete
   }
 }
 #endif

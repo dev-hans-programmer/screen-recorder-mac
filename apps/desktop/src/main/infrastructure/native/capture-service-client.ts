@@ -152,6 +152,7 @@ export class CaptureServiceClient {
 
   private async spawnAndHandshake(): Promise<void> {
     this.isClosing = false;
+    this.lastOperation = 'startup';
 
     let child: ChildProcessWithoutNullStreams;
 
@@ -236,12 +237,14 @@ export class CaptureServiceClient {
 
     return new Promise<TResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.settlePending(requestId, {
-          reject: new NativeServiceClientError({
-            code: 'NATIVE_REQUEST_TIMEOUT',
-            message: `Native request ${command} timed out after ${timeoutMs}ms.`,
-          }),
+        const timeoutError = new NativeServiceClientError({
+          code: 'NATIVE_REQUEST_TIMEOUT',
+          message: `Native request ${command} timed out after ${timeoutMs}ms.`,
         });
+
+        // A timed-out helper may still be blocked inside ScreenCaptureKit. Closing the entire
+        // transport prevents every later command from being sent to the same unresponsive process.
+        this.handleProcessFailure(timeoutError);
       }, timeoutMs);
 
       const onAbort = (): void => {

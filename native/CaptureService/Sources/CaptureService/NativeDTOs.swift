@@ -137,9 +137,6 @@ struct CaptureConfiguration: Codable, Sendable, Equatable {
       throw NativeServiceError.invalidConfiguration("An output directory is required.")
     }
 
-    if payload.microphone, payload.microphoneDeviceId?.isEmpty != false {
-      throw NativeServiceError.invalidConfiguration("A microphone device id is required when microphone capture is enabled.")
-    }
     if let region = payload.region {
       guard region.width >= 2, region.height >= 2 else {
         throw NativeServiceError.invalidConfiguration("Capture regions must be at least 2x2 pixels.")

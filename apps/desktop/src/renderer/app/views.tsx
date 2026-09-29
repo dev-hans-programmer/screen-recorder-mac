@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type {
   AppPreferencesDto,
@@ -20,6 +20,7 @@ function formatDuration(durationMs: number): string {
 }
 
 function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 B';
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
@@ -43,7 +44,12 @@ function sourceDimensions(source: CaptureSourceDto): string {
     : `${source.dimensions.width.toLocaleString()} × ${source.dimensions.height.toLocaleString()}`;
 }
 
-function qualityLabel(preferences: AppPreferencesDto | null): string {
+function qualityLabel(
+  preferences: Pick<
+    AppPreferencesDto,
+    'defaultProfileId' | 'defaultResolution' | 'defaultFrameRate'
+  > | null,
+): string {
   if (preferences === null) return 'Balanced · Source · 60 FPS';
   const profile =
     preferences.defaultProfileId[0].toUpperCase() + preferences.defaultProfileId.slice(1);
@@ -65,14 +71,61 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
   const activeSession = useRendererSelector(store, (state) => state.activeSession);
   const recordingState = useRendererSelector(store, (state) => state.recordingState);
   const progress = useRendererSelector(store, (state) => state.progress);
+  const recordingOptions = useRendererSelector(store, (state) => state.recordingOptions);
+  const diskSpace = useRendererSelector(store, (state) => state.diskSpace);
   const operation = useRendererSelector(store, (state) => state.operation);
+
+  const recording = ['preparing', 'capturing', 'paused', 'stopping'].includes(recordingState);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const timerRef = useRef<{
+    readonly sessionId: string | null;
+    readonly pausedAt: number | null;
+    readonly pausedDurationMs: number;
+  }>({ sessionId: null, pausedAt: null, pausedDurationMs: 0 });
+
+  useEffect(() => {
+    if (!initialized || !recording || activeSession === null || activeSession.startedAt === null) {
+      timerRef.current = { sessionId: null, pausedAt: null, pausedDurationMs: 0 };
+      return;
+    }
+
+    if (timerRef.current.sessionId !== activeSession.id) {
+      timerRef.current = {
+        sessionId: activeSession.id,
+        pausedAt: recordingState === 'paused' ? Date.now() : null,
+        pausedDurationMs: activeSession.pausedDurationMs,
+      };
+    } else if (recordingState === 'paused' && timerRef.current.pausedAt === null) {
+      timerRef.current = { ...timerRef.current, pausedAt: Date.now() };
+    } else if (recordingState !== 'paused' && timerRef.current.pausedAt !== null) {
+      timerRef.current = {
+        ...timerRef.current,
+        pausedAt: null,
+        pausedDurationMs:
+          timerRef.current.pausedDurationMs + Date.now() - timerRef.current.pausedAt,
+      };
+    }
+
+    const interval = window.setInterval(() => setClockNow(Date.now()), 250);
+    return () => window.clearInterval(interval);
+  }, [activeSession, initialized, recording, recordingState]);
 
   if (!initialized) return <LoadingState label="Preparing your workspace" />;
 
-  const recording = ['preparing', 'capturing', 'paused', 'stopping'].includes(recordingState);
   const permissionGranted = permissions?.screenRecording === 'granted';
   const selectedSource = sources.find((source) => source.id === selectedSourceId);
   const canStart = selectedSource !== undefined && permissionGranted && operation === 'idle';
+  const wallClockDuration =
+    activeSession?.startedAt === null || activeSession?.startedAt === undefined
+      ? 0
+      : Math.max(
+          0,
+          clockNow -
+            activeSession.startedAt -
+            timerRef.current.pausedDurationMs -
+            (timerRef.current.pausedAt === null ? 0 : clockNow - timerRef.current.pausedAt),
+        );
+  const displayedDuration = Math.max(progress.durationMs, wallClockDuration);
 
   return (
     <div className="view-stack">
@@ -105,11 +158,20 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
             <div className="recording-indicator">
               <span /> Live recording
             </div>
-            <div className="recording-timer">{formatDuration(progress.durationMs)}</div>
+            <div className="recording-timer">{formatDuration(displayedDuration)}</div>
             <p>
               {selectedSource?.name ?? 'Selected source'} · {formatBytes(progress.encodedBytes)}{' '}
               encoded
             </p>
+            <div className="active-recording-details">
+              <span>
+                {recordingOptions.profileId} · {recordingOptions.frameRate} FPS
+              </span>
+              {progress.droppedFrames > 0 && (
+                <span className="recording-warning">{progress.droppedFrames} dropped frames</span>
+              )}
+              {diskSpace !== null && <span className="recording-warning">Low disk space</span>}
+            </div>
           </div>
           <div className="recording-actions">
             {recordingState === 'paused' ? (
@@ -196,6 +258,21 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
                 ))}
               </div>
             )}
+            <div className="source-actions">
+              <Button
+                disabled={selectedSource?.kind !== 'display' || operation !== 'idle'}
+                icon="grid"
+                variant="secondary"
+                onClick={() => void store.selectRegion()}
+              >
+                {recordingOptions.region === null ? 'Select region' : 'Change region'}
+              </Button>
+              {recordingOptions.region !== null && (
+                <Button icon="circle" variant="ghost" onClick={() => store.clearRegion()}>
+                  Clear region
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="right-column">
@@ -205,32 +282,87 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
                 <span className="quality-icon">
                   <Icon name="sliders" />
                 </span>
-                <strong>{qualityLabel(preferences)}</strong>
+                <strong>
+                  {qualityLabel({
+                    ...preferences,
+                    defaultProfileId: recordingOptions.profileId,
+                    defaultResolution: recordingOptions.resolution,
+                    defaultFrameRate: recordingOptions.frameRate,
+                  })}
+                </strong>
               </div>
-              <p>Fine-tune resolution, codec, and frame rate in Settings.</p>
-              <Button
-                icon="chevron-right"
-                variant="ghost"
-                onClick={() => store.setActiveScreen('settings')}
-              >
-                Adjust quality
-              </Button>
+              <label className="compact-field">
+                <span>Profile</span>
+                <select
+                  value={recordingOptions.profileId}
+                  onChange={(event) =>
+                    store.setRecordingOptions({
+                      profileId: event.target.value as typeof recordingOptions.profileId,
+                    })
+                  }
+                >
+                  <option value="compatible">Compatible · H.264</option>
+                  <option value="balanced">Balanced · HEVC</option>
+                  <option value="master">Master · ProRes</option>
+                </select>
+              </label>
+              <div className="compact-field-grid">
+                <label className="compact-field">
+                  <span>Resolution</span>
+                  <select
+                    value={recordingOptions.resolution}
+                    onChange={(event) =>
+                      store.setRecordingOptions({
+                        resolution: event.target.value as typeof recordingOptions.resolution,
+                      })
+                    }
+                  >
+                    <option value="source">Source</option>
+                    <option value="1080p">1080p</option>
+                    <option value="4k">4K UHD</option>
+                  </select>
+                </label>
+                <label className="compact-field">
+                  <span>Frame rate</span>
+                  <select
+                    value={recordingOptions.frameRate}
+                    onChange={(event) =>
+                      store.setRecordingOptions({
+                        frameRate: Number(event.target.value) as typeof recordingOptions.frameRate,
+                      })
+                    }
+                  >
+                    <option value="30">30 FPS</option>
+                    <option value="60">60 FPS</option>
+                  </select>
+                </label>
+              </div>
+              <p>These values apply to the next recording.</p>
             </div>
             <div className="surface-card audio-card">
               <div className="card-kicker">Audio</div>
               <Toggle
-                checked={preferences?.systemAudioEnabled ?? false}
+                checked={recordingOptions.systemAudio}
                 disabled={operation !== 'idle'}
                 label="System audio"
-                onChange={(checked) =>
-                  void store.updatePreferences({ systemAudioEnabled: checked })
-                }
+                onChange={(checked) => store.setRecordingOptions({ systemAudio: checked })}
               />
               <Toggle
-                checked={preferences?.microphoneEnabled ?? false}
+                checked={recordingOptions.microphone}
                 disabled={operation !== 'idle'}
                 label="Microphone"
-                onChange={(checked) => void store.updatePreferences({ microphoneEnabled: checked })}
+                onChange={(checked) => store.setRecordingOptions({ microphone: checked })}
+              />
+              <div className="audio-divider" />
+              <Toggle
+                checked={recordingOptions.showsCursor}
+                label="Show cursor"
+                onChange={(checked) => store.setRecordingOptions({ showsCursor: checked })}
+              />
+              <Toggle
+                checked={recordingOptions.showsMouseClicks}
+                label="Show click indicators"
+                onChange={(checked) => store.setRecordingOptions({ showsMouseClicks: checked })}
               />
             </div>
           </div>
@@ -246,9 +378,13 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
                 {permissionGranted ? 'Ready to record' : 'Screen permission required'}
               </strong>
               <span>
-                {permissionGranted
-                  ? 'Your capture pipeline is ready.'
-                  : 'Allow Screen Recording access to continue.'}
+                {diskSpace !== null
+                  ? `Low disk space · ${formatBytes(diskSpace.availableBytes)} available`
+                  : permissionGranted
+                    ? recordingOptions.region === null
+                      ? 'Your capture pipeline is ready.'
+                      : 'Region capture is ready.'
+                    : 'Allow Screen Recording access to continue.'}
               </span>
             </div>
           </div>
@@ -364,6 +500,12 @@ export function SettingsView({ store }: { readonly store: RendererStore }) {
   const preferences = useRendererSelector(store, (state) => state.preferences);
   const operation = useRendererSelector(store, (state) => state.operation);
   const [outputDirectory, setOutputDirectory] = useState(preferences?.outputDirectory ?? '');
+  const [startStopShortcut, setStartStopShortcut] = useState(
+    preferences?.shortcuts.startStop ?? '',
+  );
+  const [pauseResumeShortcut, setPauseResumeShortcut] = useState(
+    preferences?.shortcuts.pauseResume ?? '',
+  );
 
   if (preferences === null) return <LoadingState label="Loading settings" />;
 
@@ -505,6 +647,52 @@ export function SettingsView({ store }: { readonly store: RendererStore }) {
             />
           </div>
         </label>
+      </section>
+      <section className="settings-section">
+        <div className="settings-section-heading">
+          <div>
+            <h3>Shortcuts</h3>
+            <p>
+              Control recording even when Capture is not focused. Use Electron accelerator syntax.
+            </p>
+          </div>
+        </div>
+        <div className="settings-fields settings-fields-two">
+          <label className="field">
+            <span>Start / stop</span>
+            <input
+              value={startStopShortcut}
+              onBlur={() => {
+                if (
+                  startStopShortcut.trim().length > 0 &&
+                  startStopShortcut !== preferences.shortcuts.startStop
+                ) {
+                  void store.updatePreferences({
+                    shortcuts: { startStop: startStopShortcut.trim() },
+                  });
+                }
+              }}
+              onChange={(event) => setStartStopShortcut(event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>Pause / resume</span>
+            <input
+              value={pauseResumeShortcut}
+              onBlur={() => {
+                if (
+                  pauseResumeShortcut.trim().length > 0 &&
+                  pauseResumeShortcut !== preferences.shortcuts.pauseResume
+                ) {
+                  void store.updatePreferences({
+                    shortcuts: { pauseResume: pauseResumeShortcut.trim() },
+                  });
+                }
+              }}
+              onChange={(event) => setPauseResumeShortcut(event.target.value)}
+            />
+          </label>
+        </div>
       </section>
     </div>
   );

@@ -1,21 +1,25 @@
 import {
   ipcChannels,
+  captureRegionSchema,
   parseIpcEvent,
   parseIpcRequest,
   parseIpcResponse,
   protocolVersion,
   type AppPreferencesDto,
+  type CaptureRegionDto,
   type CapturePermissionsDto,
   type CaptureSourceDto,
   type IpcCommandName,
   type IpcResponse,
   type RecordingArtifactDto,
+  shortcutMessageSchema,
 } from '@screen-recorder/contracts';
 
 import type { ScreenRecorderApi } from '../shared/screen-recorder-api';
 
 interface PreloadIpcTransport {
   invoke(channel: string, request: unknown): Promise<unknown>;
+  send?(channel: string, payload: unknown): void;
   on(channel: string, listener: (event: unknown, payload: unknown) => void): void;
   removeListener(channel: string, listener: (event: unknown, payload: unknown) => void): void;
 }
@@ -51,6 +55,23 @@ export function createScreenRecorderApi(
       sendCommand('capture.get-permissions', {}) as Promise<CapturePermissionsDto>,
     requestCapturePermissions: (request) =>
       sendCommand('capture.request-permissions', request) as Promise<CapturePermissionsDto>,
+    selectRegion: (displayId) =>
+      sendCommand('capture.select-region', { displayId }) as Promise<CaptureRegionDto | null>,
+    submitRegionSelection: (region) => {
+      if (transport.send === undefined) {
+        throw new Error('Region selection submission is unavailable in this renderer.');
+      }
+      transport.send(ipcChannels.regionSelection, {
+        type: 'selected',
+        region: captureRegionSchema.parse(region),
+      });
+    },
+    cancelRegionSelection: () => {
+      if (transport.send === undefined) {
+        throw new Error('Region selection cancellation is unavailable in this renderer.');
+      }
+      transport.send(ipcChannels.regionSelection, { type: 'cancelled' });
+    },
     validateRecordingRequest: (request) => sendCommand('recording.validate-request', { request }),
     startRecording: (request) => sendCommand('recording.start', { request }),
     pauseRecording: async (sessionId) => {
@@ -75,6 +96,17 @@ export function createScreenRecorderApi(
 
       return () => {
         transport.removeListener(ipcChannels.event, wrappedListener);
+      };
+    },
+    onShortcut: (listener) => {
+      const wrappedListener = (_event: unknown, payload: unknown): void => {
+        listener(shortcutMessageSchema.parse(payload).action);
+      };
+
+      transport.on(ipcChannels.shortcut, wrappedListener);
+
+      return () => {
+        transport.removeListener(ipcChannels.shortcut, wrappedListener);
       };
     },
   };

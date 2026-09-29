@@ -6,6 +6,7 @@ import {
   CaptureServiceClient,
   type NativeServiceClientOptions,
 } from '../src/main/infrastructure/native/capture-service-client';
+import { NativeServiceSupervisor } from '../src/main/infrastructure/native/native-service-supervisor';
 import {
   NativeProtocolError,
   parseNativeLine,
@@ -100,7 +101,7 @@ describe('CaptureServiceClient', () => {
     expect(helper.killed).toBe(true);
   });
 
-  it('rejects a request when it times out and supports cancellation', async () => {
+  it('terminates an unresponsive helper when a request times out', async () => {
     const helper = new FakeHelperProcess();
     helper.respondTo = (request, process) => {
       if (request.command === 'hello' || request.command === 'shutdown') {
@@ -116,17 +117,76 @@ describe('CaptureServiceClient', () => {
         );
       }
     };
-    const client = createClient(helper);
+    const failures: unknown[] = [];
+    const client = createClient(helper, { onFailure: (failure) => failures.push(failure) });
 
     await expect(client.request('heartbeat', null, { timeoutMs: 10 })).rejects.toMatchObject({
       code: 'NATIVE_REQUEST_TIMEOUT',
     });
+    expect(helper.killed).toBe(true);
+    expect(client.running).toBe(false);
+    expect(failures).toHaveLength(1);
+  });
+
+  it('supports cancellation without terminating a responsive helper', async () => {
+    const helper = new FakeHelperProcess();
+    helper.respondTo = (request, process) => {
+      if (request.command !== 'heartbeat') {
+        process.stdout.write(
+          `${JSON.stringify({
+            protocolVersion: 1,
+            serviceVersion: '0.1.0',
+            requestId: request.requestId,
+            command: request.command,
+            ok: true,
+            data: {},
+          })}\n`,
+        );
+      }
+    };
+    const client = createClient(helper);
 
     const controller = new AbortController();
     const cancelled = client.request('heartbeat', null, { signal: controller.signal });
     controller.abort();
     await expect(cancelled).rejects.toMatchObject({ code: 'NATIVE_REQUEST_ABORTED' });
+    expect(client.running).toBe(true);
     await client.dispose();
+  });
+
+  it('restarts and retries a read-only idle request once after a timeout', async () => {
+    const unresponsiveHelper = new FakeHelperProcess();
+    unresponsiveHelper.respondTo = (request, process) => {
+      if (request.command === 'hello') {
+        process.stdout.write(
+          `${JSON.stringify({
+            protocolVersion: 1,
+            serviceVersion: '0.1.0',
+            requestId: request.requestId,
+            command: request.command,
+            ok: true,
+            data: {},
+          })}\n`,
+        );
+      }
+    };
+    const replacementHelper = new FakeHelperProcess();
+    const helpers = [unresponsiveHelper, replacementHelper];
+    const spawnProcess = vi.fn(() => helpers.shift()) as unknown as NativeServiceClientOptions['spawnProcess'];
+    const failures: unknown[] = [];
+    const supervisor = new NativeServiceSupervisor({
+      executablePath: '/fake/CaptureService',
+      clientVersion: 'test',
+      defaultTimeoutMs: 10,
+      spawnProcess,
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    await expect(supervisor.request('getPermissions')).resolves.toEqual({ ready: true });
+    expect(unresponsiveHelper.killed).toBe(true);
+    expect(spawnProcess).toHaveBeenCalledTimes(2);
+    expect(failures).toHaveLength(0);
+    await supervisor.dispose();
   });
 
   it('rejects malformed native messages before they can resolve requests', async () => {
