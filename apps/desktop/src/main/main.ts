@@ -86,6 +86,8 @@ function createMainWindow(): void {
         platform: process.platform,
       }),
       defaultOutputDirectory: () => path.join(app.getPath('videos'), 'Screen Recorder'),
+      libraryDatabasePath: path.join(app.getPath('userData'), 'library', 'recordings.sqlite3'),
+      thumbnailCacheDirectory: path.join(app.getPath('userData'), 'library', 'thumbnails'),
     });
     lifecycleManager = createLifecycleManager(async () => {
       desktopControls?.dispose();

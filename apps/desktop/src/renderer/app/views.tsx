@@ -1,12 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
   AppPreferencesDto,
   CaptureSourceDto,
-  RecordingArtifactDto,
+  RecordingMetadataDto,
 } from '@screen-recorder/contracts';
 
-import { Button, EmptyState, Icon, LoadingState, StatusBadge, Toggle } from './components';
+import {
+  Button,
+  Dialog,
+  EmptyState,
+  Icon,
+  LoadingState,
+  Menu,
+  MenuItem,
+  StatusBadge,
+  Toggle,
+} from './components';
 import { useRendererSelector, type RendererStore } from './renderer-store';
 
 function formatDuration(durationMs: number): string {
@@ -416,6 +426,32 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
 export function LibraryView({ store }: { readonly store: RendererStore }) {
   const initialized = useRendererSelector(store, (state) => state.initialized);
   const recordings = useRendererSelector(store, (state) => state.recordings);
+  const operation = useRendererSelector(store, (state) => state.operation);
+  const [layout, setLayout] = useState<'grid' | 'list'>('grid');
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<'newest' | 'oldest' | 'name' | 'duration' | 'size'>('newest');
+  const [renameTarget, setRenameTarget] = useState<RecordingMetadataDto | null>(null);
+  const [renameTitle, setRenameTitle] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<RecordingMetadataDto | null>(null);
+
+  const visibleRecordings = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const filtered = recordings.filter((recording) => {
+      if (normalizedQuery.length === 0) return true;
+      return [recording.title, recording.codec, recording.profileId]
+        .join(' ')
+        .toLocaleLowerCase()
+        .includes(normalizedQuery);
+    });
+
+    return [...filtered].sort((left, right) => {
+      if (sort === 'oldest') return left.createdAt - right.createdAt;
+      if (sort === 'name') return left.title.localeCompare(right.title);
+      if (sort === 'duration') return right.durationMs - left.durationMs;
+      if (sort === 'size') return right.fileSizeBytes - left.fileSizeBytes;
+      return right.createdAt - left.createdAt;
+    });
+  }, [query, recordings, sort]);
 
   if (!initialized) return <LoadingState label="Loading library" />;
   if (recordings.length === 0) {
@@ -448,34 +484,209 @@ export function LibraryView({ store }: { readonly store: RendererStore }) {
             {recordings.length} recording{recordings.length === 1 ? '' : 's'}
           </h2>
         </div>
-        <Button icon="folder" variant="secondary">
-          Open recordings folder
-        </Button>
+        <div className="library-header-actions">
+          <Button icon="activity" variant="ghost" onClick={() => void store.refreshRecordings()}>
+            Refresh
+          </Button>
+          <Button
+            icon="folder"
+            variant="secondary"
+            onClick={() => void store.openRecordingsFolder()}
+          >
+            Open recordings folder
+          </Button>
+        </div>
       </div>
-      <section className="library-grid" aria-label="Recordings">
-        {recordings.map((recording) => (
-          <RecordingCard key={recording.id} recording={recording} />
-        ))}
-      </section>
+      <div className="library-toolbar">
+        <label className="library-search">
+          <Icon name="search" size={16} />
+          <span className="visually-hidden">Search recordings</span>
+          <input
+            placeholder="Search recordings"
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <label className="library-sort">
+          <span>Sort</span>
+          <select
+            aria-label="Sort recordings"
+            value={sort}
+            onChange={(event) => setSort(event.target.value as typeof sort)}
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="name">Name</option>
+            <option value="duration">Duration</option>
+            <option value="size">File size</option>
+          </select>
+        </label>
+        <div className="library-layout-toggle" aria-label="Library layout" role="group">
+          <Button
+            aria-label="Grid view"
+            aria-pressed={layout === 'grid'}
+            icon="grid"
+            variant="icon"
+            onClick={() => setLayout('grid')}
+          />
+          <Button
+            aria-label="List view"
+            aria-pressed={layout === 'list'}
+            icon="list"
+            variant="icon"
+            onClick={() => setLayout('list')}
+          />
+        </div>
+      </div>
+      {visibleRecordings.length === 0 ? (
+        <EmptyState
+          icon="search"
+          title="No matching recordings"
+          description="Try a different name, codec, or quality profile."
+        />
+      ) : (
+        <section
+          className={`library-grid ${layout === 'list' ? 'is-list' : ''}`}
+          aria-label="Recordings"
+        >
+          {visibleRecordings.map((recording) => (
+            <RecordingCard
+              key={recording.id}
+              layout={layout}
+              recording={recording}
+              store={store}
+              onDelete={() => setDeleteTarget(recording)}
+              onRename={() => {
+                setRenameTarget(recording);
+                setRenameTitle(recording.title);
+              }}
+            />
+          ))}
+        </section>
+      )}
+
+      <Dialog
+        description="The media file and library title will be updated together."
+        open={renameTarget !== null}
+        title="Rename recording"
+        onClose={() => setRenameTarget(null)}
+      >
+        <form
+          className="library-dialog-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (renameTarget === null) return;
+            void store.renameRecording(renameTarget.id, renameTitle).then((renamed) => {
+              if (renamed) setRenameTarget(null);
+            });
+          }}
+        >
+          <label className="field">
+            <span>Name</span>
+            <input
+              autoFocus
+              maxLength={180}
+              value={renameTitle}
+              onChange={(event) => setRenameTitle(event.target.value)}
+            />
+          </label>
+          <div className="dialog-actions">
+            <Button type="button" variant="ghost" onClick={() => setRenameTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={operation !== 'idle' || renameTitle.trim().length === 0}
+              icon="edit"
+              type="submit"
+              variant="primary"
+            >
+              Rename
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog
+        description={
+          deleteTarget?.availability === 'missing'
+            ? 'The missing item will be removed from the library.'
+            : 'The media file will be moved to Trash, where it can still be recovered.'
+        }
+        open={deleteTarget !== null}
+        title={deleteTarget?.availability === 'missing' ? 'Remove recording?' : 'Move to Trash?'}
+        onClose={() => setDeleteTarget(null)}
+      >
+        <div className="dialog-actions">
+          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={operation !== 'idle'}
+            icon="trash"
+            variant="danger"
+            onClick={() => {
+              if (deleteTarget === null) return;
+              void store.deleteRecording(deleteTarget.id).then((deleted) => {
+                if (deleted) setDeleteTarget(null);
+              });
+            }}
+          >
+            {deleteTarget?.availability === 'missing' ? 'Remove' : 'Move to Trash'}
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }
 
-function RecordingCard({ recording }: { readonly recording: RecordingArtifactDto }) {
+function RecordingCard({
+  recording,
+  layout,
+  store,
+  onRename,
+  onDelete,
+}: {
+  readonly recording: RecordingMetadataDto;
+  readonly layout: 'grid' | 'list';
+  readonly store: RendererStore;
+  readonly onRename: () => void;
+  readonly onDelete: () => void;
+}) {
+  const missing = recording.availability === 'missing';
+
   return (
-    <article className="recording-card">
+    <article className={`recording-card ${missing ? 'is-missing' : ''}`}>
       <div className="recording-thumbnail">
-        <Icon name="play" size={25} />
-        <span>{recording.profileId}</span>
+        <RecordingThumbnail recording={recording} store={store} />
+        <button
+          aria-label={`Open ${recording.title}`}
+          className="thumbnail-play"
+          disabled={missing}
+          type="button"
+          onClick={() => void store.openRecording(recording.id)}
+        >
+          <Icon name={missing ? 'archive' : 'play'} size={layout === 'list' ? 18 : 25} />
+        </button>
+        <span>{missing ? 'Missing file' : recording.profileId}</span>
       </div>
       <div className="recording-card-body">
         <div className="recording-card-title">
           <h3>{recording.title || 'Untitled recording'}</h3>
-          <Button
-            aria-label={`More actions for ${recording.title}`}
-            icon="sliders"
-            variant="icon"
-          />
+          <Menu label="Actions">
+            <MenuItem disabled={missing} onSelect={() => void store.openRecording(recording.id)}>
+              Open
+            </MenuItem>
+            <MenuItem disabled={missing} onSelect={onRename}>
+              Rename
+            </MenuItem>
+            <MenuItem disabled={missing} onSelect={() => void store.revealRecording(recording.id)}>
+              Reveal in Finder
+            </MenuItem>
+            <MenuItem onSelect={onDelete}>
+              {missing ? 'Remove from library' : 'Move to Trash'}
+            </MenuItem>
+          </Menu>
         </div>
         <p>{formatDate(recording.createdAt)}</p>
         <div className="recording-meta">
@@ -484,9 +695,64 @@ function RecordingCard({ recording }: { readonly recording: RecordingArtifactDto
           </span>
           <span>{formatDuration(recording.durationMs)}</span>
           <span>{formatBytes(recording.fileSizeBytes)}</span>
+          <span>
+            {recording.codec === 'prores422' ? 'ProRes 422' : recording.codec.toUpperCase()}
+          </span>
         </div>
       </div>
     </article>
+  );
+}
+
+function RecordingThumbnail({
+  recording,
+  store,
+}: {
+  readonly recording: RecordingMetadataDto;
+  readonly store: RendererStore;
+}) {
+  const host = useRef<HTMLDivElement>(null);
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (recording.availability === 'missing') return undefined;
+    let cancelled = false;
+    const load = () => {
+      void store
+        .getRecordingThumbnail(recording.id)
+        .then((thumbnail) => {
+          if (!cancelled) setDataUrl(thumbnail);
+        })
+        .catch(() => undefined);
+    };
+
+    if (typeof IntersectionObserver === 'undefined' || host.current === null) {
+      load();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting === true) {
+          observer.disconnect();
+          load();
+        }
+      },
+      { rootMargin: '180px' },
+    );
+    observer.observe(host.current);
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [recording.availability, recording.id, store]);
+
+  return (
+    <div className="recording-thumbnail-image" ref={host}>
+      {dataUrl !== null && <img alt="" draggable={false} src={dataUrl} />}
+    </div>
   );
 }
 

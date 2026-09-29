@@ -303,6 +303,10 @@ function createArtifact(
     );
   }
 
+  if (result.codec !== 'h264' && result.codec !== 'hevc' && result.codec !== 'prores422') {
+    throw new DomainError('UNSUPPORTED_CODEC', `Native recording returned ${result.codec}.`);
+  }
+
   const title = path.basename(result.filePath, path.extname(result.filePath));
   return createRecordingArtifact({
     id: `${active.sessionId}-artifact`,
@@ -314,6 +318,7 @@ function createArtifact(
     height: result.height,
     frameRate: result.frameRate,
     profileId: result.profileId,
+    codec: result.codec,
     hasSystemAudio: result.hasSystemAudio,
     hasMicrophone: result.hasMicrophone,
     fileSizeBytes: result.fileSizeBytes,

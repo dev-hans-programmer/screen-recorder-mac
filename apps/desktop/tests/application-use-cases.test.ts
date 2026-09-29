@@ -13,6 +13,7 @@ import {
   type Clock,
   type IdGenerator,
   type RecordingEnginePort,
+  type RecordingCatalogRepository,
   type RecordingSessionRepository,
   type StartRecordingDependencies,
 } from '@screen-recorder/application';
@@ -29,6 +30,7 @@ import {
   type CapturePermissions,
   type CaptureSource,
   type RecordingArtifact,
+  type RecordingMetadata,
   type RecordingRequest,
 } from '@screen-recorder/domain';
 
@@ -108,6 +110,28 @@ class FakeSessionRepository implements RecordingSessionRepository {
   }
 }
 
+class FakeCatalog implements RecordingCatalogRepository {
+  public readonly recordings = new Map<string, RecordingMetadata>();
+
+  public list(): Promise<readonly RecordingMetadata[]> {
+    return Promise.resolve([...this.recordings.values()]);
+  }
+
+  public findById(id: string): Promise<RecordingMetadata | undefined> {
+    return Promise.resolve(this.recordings.get(id));
+  }
+
+  public save(recording: RecordingMetadata): Promise<void> {
+    this.recordings.set(recording.id, recording);
+    return Promise.resolve();
+  }
+
+  public remove(id: string): Promise<void> {
+    this.recordings.delete(id);
+    return Promise.resolve();
+  }
+}
+
 class FakeEngine implements RecordingEnginePort {
   public readonly started: string[] = [];
   public readonly paused: string[] = [];
@@ -142,6 +166,7 @@ class FakeEngine implements RecordingEnginePort {
         height: 2160,
         frameRate: 30,
         profileId: 'balanced',
+        codec: 'hevc',
         hasSystemAudio: false,
         hasMicrophone: false,
         fileSizeBytes: 2048,
@@ -219,8 +244,10 @@ describe('recording application use cases', () => {
     await new ResumeRecordingUseCase(sessions, engine, dependencies.clock, events).execute(
       started.session.id,
     );
+    const catalog = new FakeCatalog();
     const artifact = await new StopRecordingUseCase(
       sessions,
+      catalog,
       engine,
       dependencies.clock,
       events,
@@ -233,6 +260,7 @@ describe('recording application use cases', () => {
     expect(engine.paused).toEqual(['engine-1']);
     expect(engine.resumed).toEqual(['engine-1']);
     expect(engine.stopped).toEqual(['engine-1']);
+    expect(catalog.recordings.get(artifact.id)).toMatchObject({ schemaVersion: 1, codec: 'hevc' });
     expect(events.values.every((event) => event.version === 1)).toBe(true);
     expect(events.values.some((event) => event.type === 'recording.completed')).toBe(true);
   });

@@ -1,6 +1,6 @@
 import { DomainError } from '../errors/domain-error';
 import type { DurationMs } from '../recording/duration';
-import type { FrameRate, RecordingProfileId } from '../recording/recording-profile';
+import type { FrameRate, RecordingCodec, RecordingProfileId } from '../recording/recording-profile';
 import type { RecordingFilePath } from './file-path';
 
 export interface RecordingArtifact {
@@ -13,6 +13,7 @@ export interface RecordingArtifact {
   readonly height: number;
   readonly frameRate: FrameRate;
   readonly profileId: RecordingProfileId;
+  readonly codec: RecordingCodec;
   readonly hasSystemAudio: boolean;
   readonly hasMicrophone: boolean;
   readonly fileSizeBytes: number;

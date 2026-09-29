@@ -409,24 +409,24 @@ A task is complete when:
 
 ## Phase 9 — Recording library
 
-- [ ] T090 Define recording metadata schema.
+- [x] T090 Define recording metadata schema.
   - Store path, title, duration, dimensions, FPS, codec, audio tracks, creation date, and file size.
   - Store failure and recovery metadata where applicable.
   - Acceptance: metadata schema is versioned.
 
-- [ ] T091 Implement the recording repository.
+- [x] T091 Implement the recording repository.
   - Use SQLite or another durable local metadata store.
   - Keep recordings on the filesystem.
   - Use atomic metadata updates.
   - Acceptance: metadata survives app restarts and corruption is handled safely.
 
-- [ ] T092 Implement thumbnail generation.
+- [x] T092 Implement thumbnail generation.
   - Generate thumbnails off the renderer thread.
   - Avoid loading full recordings into memory.
   - Cache thumbnails.
   - Acceptance: the library remains smooth with many recordings.
 
-- [ ] T093 Implement library UI.
+- [x] T093 Implement library UI.
   - Add grid/list views.
   - Add sorting and search.
   - Add rename, reveal in Finder, open, and delete actions.

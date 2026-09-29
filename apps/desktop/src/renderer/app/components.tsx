@@ -9,14 +9,19 @@ type IconName =
   | 'circle'
   | 'folder'
   | 'grid'
+  | 'list'
+  | 'more'
   | 'mic'
   | 'monitor'
   | 'pause'
   | 'play'
   | 'settings'
+  | 'search'
   | 'sliders'
   | 'sparkles'
   | 'stop'
+  | 'trash'
+  | 'edit'
   | 'sun'
   | 'system'
   | 'window';
@@ -28,16 +33,21 @@ const iconPaths: Record<IconName, string> = {
   circle: 'M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z',
   folder: 'M3.5 6.5h6l2 2h9v9.5h-17V6.5Z',
   grid: 'M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z',
+  list: 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
   mic: 'M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3Zm-6 8a6 6 0 0 0 12 0m-6 6v3m-3 0h6',
   monitor: 'M4 5h16v10H4V5Zm5 14h6m-3-4v4',
   pause: 'M8 5v14m8-14v14',
   play: 'm8 5 11 7-11 7V5Z',
   settings:
     'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0-5v2m0 13v2m9-8h-2M5 12H3m15.36-6.36-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0-1.42-1.42M7.06 7.06 5.64 5.64',
+  search: 'm20 20-4.4-4.4M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z',
   sliders: 'M4 6h16M4 12h16M4 18h16M8 4v4m8 2v4m-5 2v4',
   sparkles:
     'm12 3 1.4 5.6L19 10l-5.6 1.4L12 17l-1.4-5.6L5 10l5.6-1.4L12 3Zm6 12 .6 2.4L21 18l-2.4.6L18 21l-.6-2.4L15 18l2.4-.6L18 15Z',
   stop: 'M6 6h12v12H6V6Z',
+  trash: 'M4 7h16m-10 4v6m4-6v6M8 7l1-3h6l1 3m2 0-1 13H7L6 7',
+  edit: 'm4 20 4.2-1 10.6-10.6-3.2-3.2L5 15.8 4 20Zm9.8-13 3.2 3.2',
   sun: 'M12 4V2m0 20v-2m8-8h2M2 12h2m13.66-5.66 1.42-1.42M4.92 19.08l1.42-1.42m0-11.32L4.92 4.92m14.16 14.16-1.42-1.42M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z',
   system: 'M4 5h16v10H4V5Zm4 14h8m-4-4v4',
   window: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 4h16',
@@ -322,13 +332,21 @@ export function Menu({
 
 export function MenuItem({
   children,
+  disabled = false,
   onSelect,
 }: {
   readonly children: ReactNode;
+  readonly disabled?: boolean;
   readonly onSelect?: () => void;
 }) {
   return (
-    <button className="menu-item" role="menuitem" type="button" onClick={onSelect}>
+    <button
+      className="menu-item"
+      disabled={disabled}
+      role="menuitem"
+      type="button"
+      onClick={onSelect}
+    >
       {children}
     </button>
   );

@@ -76,4 +76,51 @@ describe('IPC contracts', () => {
 
     expect(JSON.parse(JSON.stringify(event))).toEqual(event);
   });
+
+  it('validates versioned library metadata and safe rename payloads', () => {
+    const request = parseIpcRequest({
+      protocolVersion,
+      requestId: 'rename-1',
+      command: 'library.rename',
+      payload: { recordingId: 'recording-1', title: 'Product walkthrough' },
+    });
+    const response = parseIpcResponse('library.list', {
+      protocolVersion,
+      requestId: 'list-1',
+      command: 'library.list',
+      ok: true,
+      data: [
+        {
+          schemaVersion: 1,
+          id: 'recording-1',
+          filePath: '/tmp/product-walkthrough.mp4',
+          title: 'Product walkthrough',
+          createdAt: 1_000,
+          durationMs: 5_000,
+          width: 1920,
+          height: 1080,
+          frameRate: 60,
+          profileId: 'balanced',
+          codec: 'hevc',
+          hasSystemAudio: true,
+          hasMicrophone: false,
+          fileSizeBytes: 10_000,
+          availability: 'available',
+          failure: null,
+          recovery: null,
+        },
+      ],
+    });
+
+    expect(request.command).toBe('library.rename');
+    expect(response.data[0]?.schemaVersion).toBe(1);
+    expect(() =>
+      parseIpcRequest({
+        protocolVersion,
+        requestId: 'rename-2',
+        command: 'library.rename',
+        payload: { recordingId: 'recording-1', title: '../unsafe' },
+      }),
+    ).toThrowError(IpcProtocolError);
+  });
 });

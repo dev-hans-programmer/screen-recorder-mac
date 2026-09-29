@@ -68,6 +68,7 @@ describe('recording session aggregate', () => {
       height: 1080,
       frameRate: 60,
       profileId: 'compatible',
+      codec: 'h264',
       hasSystemAudio: false,
       hasMicrophone: false,
       fileSizeBytes: 1024,

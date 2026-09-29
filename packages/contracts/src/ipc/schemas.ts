@@ -109,9 +109,32 @@ const recordingArtifactSchema = z
     height: z.number().int().positive(),
     frameRate: z.union([z.literal(30), z.literal(60)]),
     profileId: z.enum(['compatible', 'balanced', 'master']),
+    codec: z.enum(['h264', 'hevc', 'prores422']),
     hasSystemAudio: z.boolean(),
     hasMicrophone: z.boolean(),
     fileSizeBytes: z.number().finite().nonnegative(),
+  })
+  .strict();
+
+const recordingMetadataSchema = recordingArtifactSchema
+  .extend({
+    schemaVersion: z.literal(1),
+    availability: z.enum(['available', 'missing']),
+    failure: z
+      .object({
+        reason: z.string().min(1),
+        occurredAt: z.number().finite(),
+        recoverable: z.boolean(),
+      })
+      .strict()
+      .nullable(),
+    recovery: z
+      .object({
+        recoveredAt: z.number().finite(),
+        originalFilePath: z.string().min(1),
+      })
+      .strict()
+      .nullable(),
   })
   .strict();
 
@@ -169,6 +192,13 @@ const emptyPayloadSchema = z.object({}).strict();
 const sessionIdPayloadSchema = z.object({ sessionId: identifierSchema }).strict();
 const recordingRequestPayloadSchema = z.object({ request: recordingRequestSchema }).strict();
 const selectRegionPayloadSchema = z.object({ displayId: identifierSchema }).strict();
+const recordingIdPayloadSchema = z.object({ recordingId: identifierSchema }).strict();
+const recordingTitleSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(180)
+  .refine((value) => !/[/:\0]/u.test(value), 'Recording names cannot contain “/” or “:”.');
 
 export const shortcutMessageSchema = z
   .object({
@@ -202,6 +232,15 @@ export const ipcRequestSchema = z.discriminatedUnion('command', [
   requestSchema('recording.resume', sessionIdPayloadSchema),
   requestSchema('recording.stop', sessionIdPayloadSchema),
   requestSchema('library.list', emptyPayloadSchema),
+  requestSchema('library.thumbnail', recordingIdPayloadSchema),
+  requestSchema(
+    'library.rename',
+    z.object({ recordingId: identifierSchema, title: recordingTitleSchema }).strict(),
+  ),
+  requestSchema('library.open', recordingIdPayloadSchema),
+  requestSchema('library.reveal', recordingIdPayloadSchema),
+  requestSchema('library.delete', recordingIdPayloadSchema),
+  requestSchema('library.open-folder', emptyPayloadSchema),
   requestSchema('preferences.get', emptyPayloadSchema),
   requestSchema('preferences.update', z.object({ patch: appPreferencesPatchSchema }).strict()),
 ]);
@@ -232,7 +271,13 @@ const responseDataSchemas = {
   'recording.pause': z.null(),
   'recording.resume': z.null(),
   'recording.stop': recordingArtifactSchema,
-  'library.list': z.array(recordingArtifactSchema),
+  'library.list': z.array(recordingMetadataSchema),
+  'library.thumbnail': z.string().startsWith('data:image/').nullable(),
+  'library.rename': recordingMetadataSchema,
+  'library.open': z.null(),
+  'library.reveal': z.null(),
+  'library.delete': z.null(),
+  'library.open-folder': z.null(),
   'preferences.get': appPreferencesSchema,
   'preferences.update': appPreferencesSchema,
 } as const;
@@ -444,5 +489,6 @@ export type RecordingRequestDto = z.infer<typeof recordingRequestSchema>;
 export type AppPreferencesDto = z.infer<typeof appPreferencesSchema>;
 export type AppPreferencesPatchDto = z.infer<typeof appPreferencesPatchSchema>;
 export type RecordingArtifactDto = z.infer<typeof recordingArtifactSchema>;
+export type RecordingMetadataDto = z.infer<typeof recordingMetadataSchema>;
 export type RecordingSessionSnapshotDto = z.infer<typeof recordingSessionSnapshotSchema>;
 export type ShortcutAction = z.infer<typeof shortcutMessageSchema>['action'];

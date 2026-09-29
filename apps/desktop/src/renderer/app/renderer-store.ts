@@ -8,6 +8,7 @@ import type {
   CaptureSourceDto,
   IpcEvent,
   RecordingArtifactDto,
+  RecordingMetadataDto,
   RecordingSessionSnapshotDto,
 } from '@screen-recorder/contracts';
 
@@ -22,6 +23,7 @@ export type Operation =
   | 'pausing'
   | 'resuming'
   | 'stopping'
+  | 'library-action'
   | 'saving-preferences';
 
 export interface RecordingProgress {
@@ -53,7 +55,7 @@ export interface RendererState {
   readonly selectedSourceId: string | null;
   readonly permissions: CapturePermissionsDto | null;
   readonly preferences: AppPreferencesDto | null;
-  readonly recordings: readonly RecordingArtifactDto[];
+  readonly recordings: readonly RecordingMetadataDto[];
   readonly recordingOptions: RecordingOptions;
   readonly activeSession: RecordingSessionSnapshotDto | null;
   readonly recordingState: RecordingSessionSnapshotDto['state'] | 'idle';
@@ -95,11 +97,21 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.length > 0 ? error.message : fallback;
 }
 
-function withArtifact(
-  artifacts: readonly RecordingArtifactDto[],
-  artifact: RecordingArtifactDto,
-): readonly RecordingArtifactDto[] {
-  return [artifact, ...artifacts.filter((candidate) => candidate.id !== artifact.id)];
+function withRecording(
+  recordings: readonly RecordingMetadataDto[],
+  recording: RecordingMetadataDto,
+): readonly RecordingMetadataDto[] {
+  return [recording, ...recordings.filter((candidate) => candidate.id !== recording.id)];
+}
+
+function metadataFromArtifact(artifact: RecordingArtifactDto): RecordingMetadataDto {
+  return {
+    ...artifact,
+    schemaVersion: 1,
+    availability: 'available',
+    failure: null,
+    recovery: null,
+  };
 }
 
 /**
@@ -178,6 +190,7 @@ export class RendererStore {
 
   public setActiveScreen(screen: AppScreen): void {
     this.setState({ activeScreen: screen, error: null });
+    if (screen === 'library') void this.refreshRecordings();
   }
 
   public clearFeedback(): void {
@@ -204,6 +217,89 @@ export class RendererStore {
       this.setState({ ...this.sourceState(sources), error: null });
     } catch (error: unknown) {
       this.setState({ error: errorMessage(error, 'Capture sources could not be refreshed.') });
+    }
+  }
+
+  public async refreshRecordings(): Promise<void> {
+    try {
+      this.setState({ recordings: await this.api.listRecordings(), error: null });
+    } catch (error: unknown) {
+      this.setState({
+        error: errorMessage(error, 'The recording library could not be refreshed.'),
+      });
+    }
+  }
+
+  public getRecordingThumbnail(recordingId: string): Promise<string | null> {
+    return this.api.getRecordingThumbnail(recordingId);
+  }
+
+  public async renameRecording(recordingId: string, title: string): Promise<boolean> {
+    this.setState({ operation: 'library-action', error: null, notice: null });
+    try {
+      const recording = await this.api.renameRecording(recordingId, title);
+      this.setState({
+        recordings: withRecording(this.state.recordings, recording),
+        operation: 'idle',
+        notice: 'Recording renamed.',
+      });
+      return true;
+    } catch (error: unknown) {
+      this.setState({
+        operation: 'idle',
+        error: errorMessage(error, 'The recording could not be renamed.'),
+      });
+      return false;
+    }
+  }
+
+  public async deleteRecording(recordingId: string): Promise<boolean> {
+    const missing =
+      this.state.recordings.find((recording) => recording.id === recordingId)?.availability ===
+      'missing';
+    this.setState({ operation: 'library-action', error: null, notice: null });
+    try {
+      await this.api.deleteRecording(recordingId);
+      this.setState({
+        recordings: this.state.recordings.filter((recording) => recording.id !== recordingId),
+        operation: 'idle',
+        notice: missing
+          ? 'Missing recording removed from the library.'
+          : 'Recording moved to Trash and removed from the library.',
+      });
+      return true;
+    } catch (error: unknown) {
+      this.setState({
+        operation: 'idle',
+        error: errorMessage(error, 'The recording could not be deleted.'),
+      });
+      return false;
+    }
+  }
+
+  public async openRecording(recordingId: string): Promise<void> {
+    try {
+      await this.api.openRecording(recordingId);
+    } catch (error: unknown) {
+      this.setState({ error: errorMessage(error, 'The recording could not be opened.') });
+      await this.refreshRecordings();
+    }
+  }
+
+  public async revealRecording(recordingId: string): Promise<void> {
+    try {
+      await this.api.revealRecording(recordingId);
+    } catch (error: unknown) {
+      this.setState({ error: errorMessage(error, 'The recording could not be revealed.') });
+      await this.refreshRecordings();
+    }
+  }
+
+  public async openRecordingsFolder(): Promise<void> {
+    try {
+      await this.api.openRecordingsFolder();
+    } catch (error: unknown) {
+      this.setState({ error: errorMessage(error, 'The recordings folder could not be opened.') });
     }
   }
 
@@ -367,7 +463,7 @@ export class RendererStore {
           encodedBytes: artifact.fileSizeBytes,
           droppedFrames: 0,
         },
-        recordings: withArtifact(this.state.recordings, artifact),
+        recordings: withRecording(this.state.recordings, metadataFromArtifact(artifact)),
         operation: 'idle',
         notice: 'Recording saved to your library.',
       });
@@ -470,7 +566,7 @@ export class RendererStore {
         this.setState({
           activeSession: null,
           recordingState: 'completed',
-          recordings: withArtifact(this.state.recordings, event.artifact),
+          recordings: withRecording(this.state.recordings, metadataFromArtifact(event.artifact)),
           progress: {
             durationMs: event.artifact.durationMs,
             encodedBytes: event.artifact.fileSizeBytes,

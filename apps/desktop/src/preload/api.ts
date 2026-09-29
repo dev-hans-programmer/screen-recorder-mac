@@ -12,6 +12,7 @@ import {
   type IpcCommandName,
   type IpcResponse,
   type RecordingArtifactDto,
+  type RecordingMetadataDto,
   shortcutMessageSchema,
 } from '@screen-recorder/contracts';
 
@@ -83,7 +84,23 @@ export function createScreenRecorderApi(
     stopRecording: (sessionId) =>
       sendCommand('recording.stop', { sessionId }) as Promise<RecordingArtifactDto>,
     listRecordings: () =>
-      sendCommand('library.list', {}) as Promise<readonly RecordingArtifactDto[]>,
+      sendCommand('library.list', {}) as Promise<readonly RecordingMetadataDto[]>,
+    getRecordingThumbnail: (recordingId) =>
+      sendCommand('library.thumbnail', { recordingId }) as Promise<string | null>,
+    renameRecording: (recordingId, title) =>
+      sendCommand('library.rename', { recordingId, title }) as Promise<RecordingMetadataDto>,
+    openRecording: async (recordingId) => {
+      await sendCommand('library.open', { recordingId });
+    },
+    revealRecording: async (recordingId) => {
+      await sendCommand('library.reveal', { recordingId });
+    },
+    deleteRecording: async (recordingId) => {
+      await sendCommand('library.delete', { recordingId });
+    },
+    openRecordingsFolder: async () => {
+      await sendCommand('library.open-folder', {});
+    },
     getPreferences: () => sendCommand('preferences.get', {}) as Promise<AppPreferencesDto>,
     updatePreferences: (patch) =>
       sendCommand('preferences.update', { patch }) as Promise<AppPreferencesDto>,

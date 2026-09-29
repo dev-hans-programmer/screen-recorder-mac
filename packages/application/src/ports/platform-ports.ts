@@ -1,7 +1,22 @@
+import type { RecordingFilePath, RecordingMetadata } from '@screen-recorder/domain';
+
 export interface FileSystemPort {
   ensureDirectory(path: string): Promise<void>;
   getAvailableBytes(path: string): Promise<number>;
   fileExists(path: string): Promise<boolean>;
+}
+
+export interface RecordingFileActionsPort {
+  rename(filePath: RecordingFilePath, title: string): Promise<RecordingFilePath>;
+  moveToTrash(filePath: RecordingFilePath): Promise<void>;
+  open(filePath: RecordingFilePath): Promise<void>;
+  reveal(filePath: RecordingFilePath): Promise<void>;
+  openDirectory(directoryPath: string): Promise<void>;
+}
+
+export interface RecordingThumbnailPort {
+  getDataUrl(recording: RecordingMetadata): Promise<string | undefined>;
+  remove(recordingId: string): Promise<void>;
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';

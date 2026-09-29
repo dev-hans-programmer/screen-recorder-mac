@@ -1,4 +1,9 @@
-import type { AppPreferences, RecordingArtifact, RecordingSession } from '@screen-recorder/domain';
+import type {
+  AppPreferences,
+  RecordingArtifact,
+  RecordingMetadata,
+  RecordingSession,
+} from '@screen-recorder/domain';
 
 export interface RecordingSessionRepository {
   findActive(): Promise<RecordingSession | undefined>;
@@ -7,7 +12,10 @@ export interface RecordingSessionRepository {
 }
 
 export interface RecordingCatalogRepository {
-  list(): Promise<readonly RecordingArtifact[]>;
+  list(): Promise<readonly RecordingMetadata[]>;
+  findById(id: string): Promise<RecordingMetadata | undefined>;
+  save(recording: RecordingMetadata): Promise<void>;
+  remove(id: string): Promise<void>;
 }
 
 export interface PreferencesRepository {

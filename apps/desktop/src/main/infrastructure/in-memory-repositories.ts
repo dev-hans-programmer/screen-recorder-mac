@@ -1,7 +1,7 @@
 import {
   defaultAppPreferences,
   type AppPreferences,
-  type RecordingArtifact,
+  type RecordingMetadata,
   type RecordingSession,
 } from '@screen-recorder/domain';
 
@@ -11,11 +11,8 @@ import type {
   RecordingSessionRepository,
 } from '@screen-recorder/application';
 
-export class InMemoryRecordingRepository
-  implements RecordingSessionRepository, RecordingCatalogRepository
-{
+export class InMemoryRecordingRepository implements RecordingSessionRepository {
   private readonly sessions = new Map<string, RecordingSession>();
-  private readonly artifacts: RecordingArtifact[] = [];
 
   public findActive(): Promise<RecordingSession | undefined> {
     const active = [...this.sessions.values()].find((session) =>
@@ -31,17 +28,29 @@ export class InMemoryRecordingRepository
 
   public save(session: RecordingSession): Promise<void> {
     this.sessions.set(session.id, session);
-    const artifact = session.toSnapshot().artifact;
+    return Promise.resolve();
+  }
+}
 
-    if (artifact !== undefined && !this.artifacts.some((item) => item.id === artifact.id)) {
-      this.artifacts.push(artifact);
-    }
+export class InMemoryRecordingCatalogRepository implements RecordingCatalogRepository {
+  private readonly recordings = new Map<string, RecordingMetadata>();
 
+  public list(): Promise<readonly RecordingMetadata[]> {
+    return Promise.resolve([...this.recordings.values()]);
+  }
+
+  public findById(id: string): Promise<RecordingMetadata | undefined> {
+    return Promise.resolve(this.recordings.get(id));
+  }
+
+  public save(recording: RecordingMetadata): Promise<void> {
+    this.recordings.set(recording.id, recording);
     return Promise.resolve();
   }
 
-  public list(): Promise<readonly RecordingArtifact[]> {
-    return Promise.resolve([...this.artifacts]);
+  public remove(id: string): Promise<void> {
+    this.recordings.delete(id);
+    return Promise.resolve();
   }
 }
 

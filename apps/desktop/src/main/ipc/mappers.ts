@@ -17,6 +17,7 @@ import {
   type IpcError,
   type IpcEvent,
   type RecordingArtifactDto,
+  type RecordingMetadataDto,
   type RecordingRequestDto,
   type RecordingSessionSnapshotDto,
 } from '@screen-recorder/contracts';
@@ -120,11 +121,41 @@ export function toRecordingArtifactDto(artifact: {
   readonly height: number;
   readonly frameRate: 30 | 60;
   readonly profileId: 'compatible' | 'balanced' | 'master';
+  readonly codec: 'h264' | 'hevc' | 'prores422';
   readonly hasSystemAudio: boolean;
   readonly hasMicrophone: boolean;
   readonly fileSizeBytes: number;
 }): RecordingArtifactDto {
   return { ...artifact };
+}
+
+export function toRecordingMetadataDto(recording: {
+  readonly schemaVersion: 1;
+  readonly id: string;
+  readonly filePath: string;
+  readonly title: string;
+  readonly createdAt: number;
+  readonly durationMs: number;
+  readonly width: number;
+  readonly height: number;
+  readonly frameRate: 30 | 60;
+  readonly profileId: 'compatible' | 'balanced' | 'master';
+  readonly codec: 'h264' | 'hevc' | 'prores422';
+  readonly hasSystemAudio: boolean;
+  readonly hasMicrophone: boolean;
+  readonly fileSizeBytes: number;
+  readonly availability: 'available' | 'missing';
+  readonly failure:
+    | { readonly reason: string; readonly occurredAt: number; readonly recoverable: boolean }
+    | undefined;
+  readonly recovery:
+    { readonly recoveredAt: number; readonly originalFilePath: string } | undefined;
+}): RecordingMetadataDto {
+  return {
+    ...recording,
+    failure: recording.failure ?? null,
+    recovery: recording.recovery ?? null,
+  };
 }
 
 export function toRecordingSessionSnapshotDto(snapshot: {

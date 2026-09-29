@@ -16,6 +16,7 @@ import {
   toPreferencesDto,
   toPreferencesPatch,
   toRecordingArtifactDto,
+  toRecordingMetadataDto,
   toRecordingRequest,
   toRecordingSessionSnapshotDto,
   toValidatedRecordingRequestDto,
@@ -172,8 +173,36 @@ async function dispatchRequest(
     case 'library.list':
       return successResponse(
         request,
-        (await container.useCases.listRecordings.execute()).map(toRecordingArtifactDto),
+        (await container.useCases.listRecordings.execute()).map(toRecordingMetadataDto),
       );
+    case 'library.thumbnail':
+      return successResponse(
+        request,
+        (await container.useCases.getRecordingThumbnail.execute(request.payload.recordingId)) ??
+          null,
+      );
+    case 'library.rename':
+      return successResponse(
+        request,
+        toRecordingMetadataDto(
+          await container.useCases.renameRecording.execute(
+            request.payload.recordingId,
+            request.payload.title,
+          ),
+        ),
+      );
+    case 'library.open':
+      await container.useCases.openRecording.execute(request.payload.recordingId);
+      return successResponse(request, null);
+    case 'library.reveal':
+      await container.useCases.revealRecording.execute(request.payload.recordingId);
+      return successResponse(request, null);
+    case 'library.delete':
+      await container.useCases.deleteRecording.execute(request.payload.recordingId);
+      return successResponse(request, null);
+    case 'library.open-folder':
+      await container.useCases.openRecordingsFolder.execute();
+      return successResponse(request, null);
     case 'preferences.get':
       return successResponse(
         request,

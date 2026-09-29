@@ -5,6 +5,7 @@ export * from './capture/capture-source-selection';
 export * from './errors/domain-error';
 export * from './library/file-path';
 export * from './library/recording-artifact';
+export * from './library/recording-metadata';
 export * from './permissions';
 export * from './preferences/app-preferences';
 export * from './recording/duration';

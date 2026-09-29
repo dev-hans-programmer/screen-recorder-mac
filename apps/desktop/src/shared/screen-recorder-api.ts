@@ -7,6 +7,7 @@ import type {
   IpcEvent,
   IpcResponse,
   RecordingArtifactDto,
+  RecordingMetadataDto,
   RecordingRequestDto,
   ShortcutAction,
 } from '@screen-recorder/contracts';
@@ -28,7 +29,13 @@ export interface ScreenRecorderApi {
   pauseRecording(sessionId: string): Promise<void>;
   resumeRecording(sessionId: string): Promise<void>;
   stopRecording(sessionId: string): Promise<RecordingArtifactDto>;
-  listRecordings(): Promise<readonly RecordingArtifactDto[]>;
+  listRecordings(): Promise<readonly RecordingMetadataDto[]>;
+  getRecordingThumbnail(recordingId: string): Promise<string | null>;
+  renameRecording(recordingId: string, title: string): Promise<RecordingMetadataDto>;
+  openRecording(recordingId: string): Promise<void>;
+  revealRecording(recordingId: string): Promise<void>;
+  deleteRecording(recordingId: string): Promise<void>;
+  openRecordingsFolder(): Promise<void>;
   getPreferences(): Promise<AppPreferencesDto>;
   updatePreferences(patch: AppPreferencesPatchDto): Promise<AppPreferencesDto>;
   onEvent(listener: (event: IpcEvent) => void): () => void;

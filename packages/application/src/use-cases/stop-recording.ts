@@ -1,15 +1,17 @@
-import { DomainError } from '@screen-recorder/domain';
+import { DomainError, createRecordingMetadataFromArtifact } from '@screen-recorder/domain';
 
 import type { RecordingEnginePort } from '../ports/recording-engine-port';
 import type {
   ApplicationEventPublisher,
   Clock,
+  RecordingCatalogRepository,
   RecordingSessionRepository,
 } from '../ports/repositories';
 
 export class StopRecordingUseCase {
   public constructor(
     private readonly sessions: RecordingSessionRepository,
+    private readonly catalog: RecordingCatalogRepository,
     private readonly engine: RecordingEnginePort,
     private readonly clock: Clock,
     private readonly events: ApplicationEventPublisher,
@@ -30,6 +32,7 @@ export class StopRecordingUseCase {
     try {
       const artifact = await this.engine.stop(handleId);
       const completedAt = this.clock.now();
+      await this.catalog.save(createRecordingMetadataFromArtifact(artifact));
       session.complete(completedAt, artifact);
       await this.sessions.save(session);
       this.events.publish({

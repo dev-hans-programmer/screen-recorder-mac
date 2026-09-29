@@ -172,7 +172,9 @@ describe('CaptureServiceClient', () => {
     };
     const replacementHelper = new FakeHelperProcess();
     const helpers = [unresponsiveHelper, replacementHelper];
-    const spawnProcess = vi.fn(() => helpers.shift()) as unknown as NativeServiceClientOptions['spawnProcess'];
+    const spawnProcess = vi.fn(() =>
+      helpers.shift(),
+    ) as unknown as NativeServiceClientOptions['spawnProcess'];
     const failures: unknown[] = [];
     const supervisor = new NativeServiceSupervisor({
       executablePath: '/fake/CaptureService',

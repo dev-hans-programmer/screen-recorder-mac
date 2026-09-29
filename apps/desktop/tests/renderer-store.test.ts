@@ -6,6 +6,7 @@ import type {
   CaptureSourceDto,
   IpcEvent,
   RecordingArtifactDto,
+  RecordingMetadataDto,
   RecordingSessionSnapshotDto,
 } from '@screen-recorder/contracts';
 
@@ -50,6 +51,7 @@ const artifact: RecordingArtifactDto = {
   height: 1600,
   frameRate: 60,
   profileId: 'balanced',
+  codec: 'hevc',
   hasSystemAudio: true,
   hasMicrophone: false,
   fileSizeBytes: 1_048_576,
@@ -117,6 +119,19 @@ function createApi() {
     resumeRecording: vi.fn(async () => undefined),
     stopRecording: vi.fn(async () => artifact),
     listRecordings: vi.fn(async () => []),
+    getRecordingThumbnail: vi.fn(async () => null),
+    renameRecording: vi.fn(async (_recordingId, title): Promise<RecordingMetadataDto> => ({
+      ...artifact,
+      title,
+      schemaVersion: 1,
+      availability: 'available',
+      failure: null,
+      recovery: null,
+    })),
+    openRecording: vi.fn(async () => undefined),
+    revealRecording: vi.fn(async () => undefined),
+    deleteRecording: vi.fn(async () => undefined),
+    openRecordingsFolder: vi.fn(async () => undefined),
     getPreferences: vi.fn(async () => currentPreferences),
     updatePreferences: vi.fn(async (patch) => {
       currentPreferences = {
@@ -201,7 +216,13 @@ describe('RendererStore', () => {
     expect(fixture.api.resumeRecording).toHaveBeenCalledWith(session.id);
     expect(fixture.api.stopRecording).toHaveBeenCalledWith(session.id);
     expect(store.getState().activeSession).toBeNull();
-    expect(store.getState().recordings[0]).toEqual(artifact);
+    expect(store.getState().recordings[0]).toEqual({
+      ...artifact,
+      schemaVersion: 1,
+      availability: 'available',
+      failure: null,
+      recovery: null,
+    });
     expect(store.getState().recordingState).toBe('completed');
   });
 
@@ -250,5 +271,28 @@ describe('RendererStore', () => {
 
     expect(store.getState().sources).toEqual([]);
     expect(store.getState().selectedSourceId).toBeNull();
+  });
+
+  it('renames and deletes recordings through purpose-built library actions', async () => {
+    const fixture = createApi();
+    const store = new RendererStore(fixture.api);
+    await store.initialize();
+    fixture.emit({
+      protocolVersion: 1,
+      eventId: 'recording-completed',
+      version: 1,
+      type: 'recording.completed',
+      sessionId: 'session-1',
+      artifact,
+      occurredAt: 2_500,
+    });
+
+    await store.renameRecording(artifact.id, 'Renamed capture');
+    expect(fixture.api.renameRecording).toHaveBeenCalledWith(artifact.id, 'Renamed capture');
+    expect(store.getState().recordings[0]?.title).toBe('Renamed capture');
+
+    await store.deleteRecording(artifact.id);
+    expect(fixture.api.deleteRecording).toHaveBeenCalledWith(artifact.id);
+    expect(store.getState().recordings).toEqual([]);
   });
 });
