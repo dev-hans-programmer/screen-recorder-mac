@@ -14,9 +14,9 @@ const foundationItems = [
     status: 'ready',
   },
   {
-    label: 'Native capture',
-    value: 'Next phase',
-    status: 'pending',
+    label: 'Native bridge',
+    value: 'Electron ↔ Swift',
+    status: 'ready',
   },
 ] as const;
 
@@ -27,14 +27,14 @@ export function App(): ReactElement {
         <div className="eyebrow">{appMetadata.phase}</div>
         <h1 id="app-title">Capture your screen beautifully.</h1>
         <p className="hero-copy">
-          The production foundation is ready. Native capture and recording will be connected in the
-          next implementation phase.
+          The production foundation and native capture bridge are connected. The full recorder
+          workspace will be introduced in the next UI phase.
         </p>
         <div className="hero-actions">
           <button className="primary-button" type="button" disabled>
             Start recording
           </button>
-          <span className="availability-note">Capture engine coming next</span>
+          <span className="availability-note">Recorder workspace coming next</span>
         </div>
       </section>
 

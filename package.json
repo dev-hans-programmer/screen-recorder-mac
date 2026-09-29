@@ -9,10 +9,10 @@
     "pnpm": ">=12 <13"
   },
   "scripts": {
-    "start": "pnpm --filter @screen-recorder/desktop start",
-    "dev": "pnpm --filter @screen-recorder/desktop start",
-    "package": "pnpm --filter @screen-recorder/desktop package",
-    "make": "pnpm --filter @screen-recorder/desktop make",
+    "start": "pnpm native:build && pnpm --filter @screen-recorder/desktop start",
+    "dev": "pnpm native:build && pnpm --filter @screen-recorder/desktop start",
+    "package": "pnpm native:build && pnpm --filter @screen-recorder/desktop package",
+    "make": "pnpm native:build && pnpm --filter @screen-recorder/desktop make",
     "typecheck": "pnpm --filter @screen-recorder/desktop typecheck",
     "lint": "eslint apps packages",
     "test": "pnpm --filter @screen-recorder/desktop test && pnpm native:test",

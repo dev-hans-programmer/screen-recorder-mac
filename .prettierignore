@@ -6,3 +6,4 @@ apps/desktop/coverage
 native/.build
 native/**/.build
 *.lock
+.vscode/launch.json

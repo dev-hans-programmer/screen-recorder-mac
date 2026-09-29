@@ -14,9 +14,11 @@ import {
   UpdatePreferencesUseCase,
   ValidateRecordingRequestUseCase,
   type ApplicationEventPublisher,
+  type CapturePort,
   type Clock,
   type IdGenerator,
   type Logger,
+  type RecordingEnginePort,
 } from '@screen-recorder/application';
 
 import { createConsoleLogger } from '../infrastructure/logger';
@@ -24,8 +26,11 @@ import {
   InMemoryPreferencesRepository,
   InMemoryRecordingRepository,
 } from '../infrastructure/in-memory-repositories';
-import { UnconfiguredCapturePort } from '../infrastructure/unconfigured-capture-port';
-import { UnconfiguredRecordingEngine } from '../infrastructure/unconfigured-recording-engine';
+import {
+  NativeCapturePort,
+  NativeRecordingEngine,
+} from '../infrastructure/native/native-capture-adapter';
+import { NativeServiceSupervisor } from '../infrastructure/native/native-service-supervisor';
 
 class SystemClock implements Clock {
   public now(): number {
@@ -40,8 +45,8 @@ class RandomIdGenerator implements IdGenerator {
 }
 
 export interface ApplicationContainer {
-  readonly capture: UnconfiguredCapturePort;
-  readonly engine: UnconfiguredRecordingEngine;
+  readonly capture: CapturePort;
+  readonly engine: RecordingEnginePort;
   readonly useCases: {
     readonly checkCapturePermissions: CheckCapturePermissionsUseCase;
     readonly getPreferences: GetPreferencesUseCase;
@@ -60,16 +65,45 @@ export interface ApplicationContainer {
   dispose(): Promise<void>;
 }
 
+export interface ApplicationContainerOptions {
+  readonly nativeServicePath: string;
+  readonly defaultOutputDirectory: () => string;
+}
+
 export function createApplicationContainer(
   events: ApplicationEventPublisher,
+  options: ApplicationContainerOptions,
   logger: Logger = createConsoleLogger(),
 ): ApplicationContainer {
-  const capture = new UnconfiguredCapturePort();
-  const engine = new UnconfiguredRecordingEngine();
   const sessions = new InMemoryRecordingRepository();
   const preferences = new InMemoryPreferencesRepository();
   const clock = new SystemClock();
   const ids = new RandomIdGenerator();
+  const supervisor = new NativeServiceSupervisor({
+    executablePath: options.nativeServicePath,
+    clientVersion: '0.1.0',
+    onFailure: (failure) => {
+      events.publish({
+        version: 1,
+        type: 'native-service.failed',
+        sessionId: failure.sessionId,
+        operation: failure.operation,
+        message: failure.error.message,
+        occurredAt: clock.now(),
+      });
+    },
+    onLog: (message) => logger.debug('Native CaptureService output.', { message }),
+  });
+  const capture = new NativeCapturePort(supervisor);
+  const engine = new NativeRecordingEngine({
+    supervisor,
+    clock,
+    events,
+    outputDirectory: async () => {
+      const preferencesSnapshot = await preferences.get();
+      return preferencesSnapshot.outputDirectory.trim() || options.defaultOutputDirectory();
+    },
+  });
 
   return {
     capture,

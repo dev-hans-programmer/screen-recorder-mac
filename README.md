@@ -31,6 +31,5 @@ pnpm native:build
 pnpm native:test
 ```
 
-The Electron application is currently in the foundation phase. Phase 4 now includes the native
-CaptureService protocol, permission inspection, source discovery, configuration validation, and
-bounded sample diagnostics. AVAssetWriter encoding is added in the next phase.
+The Electron application now includes the native CaptureService protocol, AVAssetWriter recording,
+and the supervised Electron-to-Swift bridge. The renderer-facing recording UI is the next phase.

@@ -8,6 +8,7 @@ import {
 } from './application/composition-root';
 import { loadRuntimeConfig } from './infrastructure/runtime-config';
 import { createLifecycleManager, type LifecycleManager } from './infrastructure/lifecycle-manager';
+import { resolveCaptureServicePath } from './infrastructure/native/native-service-path';
 import { createWindowEventPublisher } from './ipc/ipc-event-publisher';
 import { registerIpcController } from './ipc/ipc-controller';
 import { buildContentSecurityPolicy, isAllowedRendererUrl } from './security/security-policy';
@@ -54,7 +55,17 @@ function createMainWindow(): void {
     const events = createWindowEventPublisher((channel, event) => {
       mainWindow?.webContents.send(channel, event);
     });
-    applicationContainer = createApplicationContainer(events);
+    applicationContainer = createApplicationContainer(events, {
+      nativeServicePath: resolveCaptureServicePath({
+        isPackaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+        workingDirectory: process.cwd(),
+        moduleDirectory: __dirname,
+        architecture: process.arch,
+        platform: process.platform,
+      }),
+      defaultOutputDirectory: () => path.join(app.getPath('videos'), 'Screen Recorder'),
+    });
     lifecycleManager = createLifecycleManager(
       () => applicationContainer?.dispose() ?? Promise.resolve(),
     );

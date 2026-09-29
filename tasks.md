@@ -308,7 +308,7 @@ A task is complete when:
 
 ## Phase 6 — Electron native bridge
 
-- [ ] T060 Implement the TypeScript `CaptureServiceClient`.
+- [x] T060 Implement the TypeScript `CaptureServiceClient`.
   - Spawn the Swift helper from the Electron main process.
   - Resolve the helper path in development and packaged builds.
   - Implement request correlation.
@@ -316,19 +316,19 @@ A task is complete when:
   - Implement event parsing.
   - Acceptance: the client passes protocol tests against a fake helper.
 
-- [ ] T061 Implement native-service supervision.
+- [x] T061 Implement native-service supervision.
   - Restart the helper only when safe.
   - Prevent duplicate recording sessions.
   - Surface helper crashes to the application layer.
   - Acceptance: killing the helper produces a controlled application state.
 
-- [ ] T062 Implement source and capability mapping.
+- [x] T062 Implement source and capability mapping.
   - Convert Swift DTOs into domain models.
   - Map native codec capabilities to quality profiles.
   - Map native errors to domain errors.
   - Acceptance: no native types leak beyond the infrastructure adapter.
 
-- [ ] T063 Implement recording orchestration.
+- [x] T063 Implement recording orchestration.
   - Connect application use cases to the native bridge.
   - Publish application events to the renderer through typed IPC.
   - Throttle progress events.

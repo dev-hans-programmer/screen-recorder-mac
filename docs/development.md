@@ -7,7 +7,8 @@
 - pnpm 12.
 - Xcode command-line tools.
 
-The native Swift CaptureService is not part of the Phase 1 scaffold yet, but the Swift toolchain is required before native work begins.
+The native Swift CaptureService is built and launched by the Electron main process. The Swift
+toolchain is required for local development and packaging.
 
 ## Install dependencies
 
@@ -23,7 +24,8 @@ pnpm install
 pnpm dev
 ```
 
-The root command delegates to the Electron desktop workspace.
+The root command builds the Swift helper and then starts the Electron desktop workspace. This keeps
+the development helper path deterministic across fresh checkouts.
 
 ## Validation commands
 
@@ -43,12 +45,11 @@ Copy `apps/desktop/.env.example` to a local `.env` file only when needed. Do not
 | `SCREEN_RECORDER_LOG_LEVEL` | `silent`, `error`, `warn`, `info`, `debug` | `info`  | Controls future main-process logging       |
 | `SCREEN_RECORDER_DEVTOOLS`  | `0`, `1`                                   | `0`     | Opens Chromium DevTools during development |
 
-## Expected Phase 3 behavior
+## Expected Phase 6 behavior
 
 The app opens the foundation screen showing the project name, current version, active platform
-target, and the fact that native capture has not been implemented yet. The renderer also has access
-to the typed `window.screenRecorder` bridge, while capture commands remain unavailable until the
-Swift service is added.
+target, and that the Electron-to-Swift native bridge is ready. The renderer has access to the typed
+`window.screenRecorder` bridge; the full recording workspace is introduced in Phase 7.
 
 See [security.md](security.md) for the Electron boundary and IPC rules.
 
@@ -65,6 +66,6 @@ To run the service directly for protocol inspection:
 pnpm native:run
 ```
 
-Enter one JSON request per line and press `Ctrl-D` to close stdin. The native service currently
-provides source/capability/permission/configuration foundations; encoding and completed recording
-files are intentionally deferred to Phase 5.
+Enter one JSON request per line and press `Ctrl-D` to close stdin. The Electron main process starts
+the same helper automatically, correlates requests, maps native DTOs into domain ports, and keeps
+raw media entirely inside Swift.

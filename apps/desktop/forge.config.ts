@@ -4,6 +4,12 @@ import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { VitePlugin } from '@electron-forge/plugin-vite';
+import path from 'node:path';
+
+const nativeServiceBinary = path.resolve(
+  __dirname,
+  `../../native/CaptureService/.build/${process.arch === 'x64' ? 'x86_64' : process.arch}-apple-macosx/release/CaptureService`,
+);
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -11,6 +17,7 @@ const config: ForgeConfig = {
     name: 'Screen Recorder',
     executableName: 'Screen Recorder',
     appBundleId: 'com.screenrecorder.app',
+    extraResource: [nativeServiceBinary],
   },
   rebuildConfig: {},
   makers: [new MakerDMG({}, ['darwin']), new MakerZIP({}, ['darwin'])],
