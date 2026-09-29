@@ -51,3 +51,20 @@ to the typed `window.screenRecorder` bridge, while capture commands remain unava
 Swift service is added.
 
 See [security.md](security.md) for the Electron boundary and IPC rules.
+
+## Native CaptureService commands
+
+```bash
+pnpm native:build
+pnpm native:test
+```
+
+To run the service directly for protocol inspection:
+
+```bash
+pnpm native:run
+```
+
+Enter one JSON request per line and press `Ctrl-D` to close stdin. The native service currently
+provides source/capability/permission/configuration foundations; encoding and completed recording
+files are intentionally deferred to Phase 5.

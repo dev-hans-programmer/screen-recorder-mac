@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:screen-recorder}/native/CaptureService",
+            "name": "Debug CaptureService (native/CaptureService)",
+            "target": "CaptureService",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug CaptureService (native/CaptureService)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:screen-recorder}/native/CaptureService",
+            "name": "Release CaptureService (native/CaptureService)",
+            "target": "CaptureService",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release CaptureService (native/CaptureService)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:screen-recorder}/native/CaptureService",
+            "name": "Debug CaptureServiceSmokeTests (native/CaptureService)",
+            "target": "CaptureServiceSmokeTests",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug CaptureServiceSmokeTests (native/CaptureService)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:screen-recorder}/native/CaptureService",
+            "name": "Release CaptureServiceSmokeTests (native/CaptureService)",
+            "target": "CaptureServiceSmokeTests",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release CaptureServiceSmokeTests (native/CaptureService)"
+        }
+    ]
+}

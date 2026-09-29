@@ -4,4 +4,5 @@ apps/desktop/.vite
 apps/desktop/out
 apps/desktop/coverage
 native/.build
+native/**/.build
 *.lock

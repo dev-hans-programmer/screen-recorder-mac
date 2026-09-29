@@ -15,7 +15,10 @@
     "make": "pnpm --filter @screen-recorder/desktop make",
     "typecheck": "pnpm --filter @screen-recorder/desktop typecheck",
     "lint": "eslint apps packages",
-    "test": "pnpm --filter @screen-recorder/desktop test",
+    "test": "pnpm --filter @screen-recorder/desktop test && pnpm native:test",
+    "native:build": "swift build -c release --package-path native/CaptureService",
+    "native:test": "swift run --package-path native/CaptureService CaptureServiceSmokeTests",
+    "native:run": "swift run --package-path native/CaptureService CaptureService",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "clean": "rimraf apps/desktop/.vite apps/desktop/out apps/desktop/coverage"

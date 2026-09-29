@@ -200,12 +200,12 @@ A task is complete when:
 
 ## Phase 4 — Swift CaptureService
 
-- [ ] T040 Create the Swift Package or Xcode target.
+- [x] T040 Create the Swift Package or Xcode target.
   - Add `ScreenCaptureKit`, `AVFoundation`, `CoreMedia`, `CoreAudio`, `AppKit`, and `OSLog` dependencies.
   - Define a release build configuration.
   - Acceptance: native service builds on a clean macOS machine.
 
-- [ ] T041 Implement the native command protocol.
+- [x] T041 Implement the native command protocol.
   - Add request decoding.
   - Add response encoding.
   - Add request IDs.
@@ -213,28 +213,28 @@ A task is complete when:
   - Add service version negotiation.
   - Acceptance: the service can respond to `hello`, `getCapabilities`, and `shutdown`.
 
-- [ ] T042 Implement native service process control.
+- [x] T042 Implement native service process control.
   - Add clean startup and shutdown.
   - Handle stdin/stdout or Unix socket closure.
   - Handle unexpected parent-process termination.
   - Add heartbeat and health state.
   - Acceptance: the service exits cleanly and reports failures without hanging.
 
-- [ ] T043 Implement ScreenCaptureKit source discovery.
+- [x] T043 Implement ScreenCaptureKit source discovery.
   - Enumerate displays.
   - Enumerate windows.
   - Enumerate running applications.
   - Return stable source identifiers and display scale information.
   - Acceptance: TypeScript receives accurate source metadata for single and multi-monitor setups.
 
-- [ ] T044 Implement permission inspection and request flow.
+- [x] T044 Implement permission inspection and request flow.
   - Detect Screen Recording permission.
   - Detect microphone permission when needed.
   - Return actionable permission states.
   - Handle cases where macOS requires an app restart after permission changes.
   - Acceptance: denied, granted, and not-yet-requested states are distinguishable.
 
-- [ ] T045 Implement capture configuration.
+- [x] T045 Implement capture configuration.
   - Configure source filter.
   - Configure width and height.
   - Configure source and destination rectangles.
@@ -245,7 +245,7 @@ A task is complete when:
   - Configure SDR/HDR capability detection.
   - Acceptance: configuration is validated before capture begins.
 
-- [ ] T046 Implement native frame and audio output handling.
+- [x] T046 Implement native frame and audio output handling.
   - Use dedicated queues or actors for video and audio.
   - Validate sample buffers.
   - Preserve timestamps.
