@@ -16,6 +16,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@screen-recorder/application": "workspace:*",
+    "@screen-recorder/domain": "workspace:*",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

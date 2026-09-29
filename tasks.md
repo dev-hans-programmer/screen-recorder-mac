@@ -108,28 +108,28 @@ A task is complete when:
 
 ## Phase 2 — Domain model and application layer
 
-- [ ] T020 Create the domain package.
+- [x] T020 Create the domain package.
   - Add bounded contexts for capture, recording, library, preferences, and permissions.
   - Add value objects for dimensions, frame rate, file paths, durations, codec profiles, and capture regions.
   - Acceptance: domain package has no Electron, React, Node.js, or browser imports.
 
-- [ ] T021 Implement capture domain models.
+- [x] T021 Implement capture domain models.
   - Model displays, windows, running applications, and regions.
   - Model source capabilities and selection state.
   - Model capture permissions.
   - Acceptance: capture entities and invariants have unit tests.
 
-- [ ] T022 Implement recording domain models.
+- [x] T022 Implement recording domain models.
   - Add recording session states:
     `Idle → Preparing → Capturing → Paused → Stopping → Completed | Failed`.
   - Model recording metadata, quality profile, audio options, and statistics.
   - Acceptance: illegal state transitions are rejected and tested.
 
-- [ ] T023 Implement domain errors.
+- [x] T023 Implement domain errors.
   - Add typed errors for permission denial, unsupported codec, invalid source, insufficient disk space, helper failure, and finalization failure.
   - Acceptance: application code can distinguish recoverable and non-recoverable errors.
 
-- [ ] T024 Define application ports.
+- [x] T024 Define application ports.
   - `CapturePort`
   - `RecordingEnginePort`
   - `PermissionPort`
@@ -140,7 +140,7 @@ A task is complete when:
   - `Logger`
   - Acceptance: ports describe behavior without depending on concrete infrastructure.
 
-- [ ] T025 Implement application use cases.
+- [x] T025 Implement application use cases.
   - `ListCaptureSources`
   - `CheckCapturePermissions`
   - `RequestCapturePermissions`
@@ -154,7 +154,7 @@ A task is complete when:
   - `UpdatePreferences`
   - Acceptance: use cases are tested with fake ports.
 
-- [ ] T026 Define application events.
+- [x] T026 Define application events.
   - Recording state changes.
   - Recording progress.
   - Dropped-frame warnings.

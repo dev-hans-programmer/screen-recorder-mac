@@ -207,15 +207,30 @@ settings:
 importers:
   .:
     devDependencies:
+      '@eslint/js':
+        specifier: 10.0.1
+        version: 10.0.1(eslint@10.11.0(jiti@2.7.0)(supports-color@8.1.1))
+      eslint:
+        specifier: 10.11.0
+        version: 10.11.0(jiti@2.7.0)(supports-color@8.1.1)
       prettier:
         specifier: 3.9.9
         version: 3.9.9
       rimraf:
         specifier: 6.1.3
         version: 6.1.3
+      typescript-eslint:
+        specifier: 8.71.0
+        version: 8.71.0(eslint@10.11.0(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3)
 
   apps/desktop:
     dependencies:
+      '@screen-recorder/application':
+        specifier: workspace:*
+        version: link:../../packages/application
+      '@screen-recorder/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       react:
         specifier: 19.3.0
         version: 19.3.0
@@ -277,6 +292,14 @@ importers:
       vitest:
         specifier: 5.0.2
         version: 5.0.2(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(jiti@2.7.0)(terser@5.51.2))
+
+  packages/application:
+    dependencies:
+      '@screen-recorder/domain':
+        specifier: workspace:*
+        version: link:../domain
+
+  packages/domain: {}
 
 packages:
   '@cacheable/memory@2.2.0':

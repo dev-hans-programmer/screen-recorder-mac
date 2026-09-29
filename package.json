@@ -14,14 +14,17 @@
     "package": "pnpm --filter @screen-recorder/desktop package",
     "make": "pnpm --filter @screen-recorder/desktop make",
     "typecheck": "pnpm --filter @screen-recorder/desktop typecheck",
-    "lint": "pnpm --filter @screen-recorder/desktop lint",
+    "lint": "eslint apps packages",
     "test": "pnpm --filter @screen-recorder/desktop test",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "clean": "rimraf apps/desktop/.vite apps/desktop/out apps/desktop/coverage"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.11.0",
     "prettier": "3.9.9",
-    "rimraf": "6.1.3"
+    "rimraf": "6.1.3",
+    "typescript-eslint": "8.71.0"
   }
 }

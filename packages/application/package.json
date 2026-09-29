@@ -1,0 +1,12 @@
+{
+  "name": "@screen-recorder/application",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@screen-recorder/domain": "workspace:*"
+  }
+}
