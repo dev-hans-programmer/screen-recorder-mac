@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 import {
   buildContentSecurityPolicy,
@@ -31,5 +32,10 @@ describe('Electron renderer security policy', () => {
     expect(buildContentSecurityPolicy(true)).toContain("script-src 'self' 'unsafe-inline'");
     expect(contentSecurityPolicy).toContain("script-src 'self'");
     expect(contentSecurityPolicy).not.toContain("script-src 'self' 'unsafe-inline'");
+  });
+
+  it('allows the private media scheme in the HTML fallback policy', () => {
+    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    expect(html).toContain("media-src 'self' screen-recorder-media:");
   });
 });

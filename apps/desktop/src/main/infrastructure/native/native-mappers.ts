@@ -83,6 +83,11 @@ export interface NativeEditedRecordingResultDto {
   readonly hasMicrophone: boolean;
 }
 
+export interface NativeRecordingPreviewResultDto {
+  readonly status: string;
+  readonly filePath: string;
+}
+
 export interface NativeHealthDto {
   readonly state: string;
   readonly lastHeartbeatAt: number;
@@ -297,6 +302,14 @@ export function parseNativeEditedRecordingResult(value: unknown): NativeEditedRe
     fileSizeBytes: finiteNumber(result.fileSizeBytes, 'fileSizeBytes'),
     hasSystemAudio: booleanValue(result.hasSystemAudio, 'hasSystemAudio'),
     hasMicrophone: booleanValue(result.hasMicrophone, 'hasMicrophone'),
+  };
+}
+
+export function parseNativeRecordingPreviewResult(value: unknown): NativeRecordingPreviewResultDto {
+  const result = record(value, 'recording preview');
+  return {
+    status: stringValue(result.status, 'status'),
+    filePath: stringValue(result.filePath, 'filePath'),
   };
 }
 

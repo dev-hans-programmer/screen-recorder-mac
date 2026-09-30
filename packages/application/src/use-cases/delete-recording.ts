@@ -1,6 +1,10 @@
 import { DomainError } from '@screen-recorder/domain';
 
-import type { RecordingFileActionsPort, RecordingThumbnailPort } from '../ports/platform-ports';
+import type {
+  RecordingFileActionsPort,
+  RecordingPreviewPort,
+  RecordingThumbnailPort,
+} from '../ports/platform-ports';
 import type { RecordingCatalogRepository } from '../ports/repositories';
 
 export class DeleteRecordingUseCase {
@@ -8,6 +12,7 @@ export class DeleteRecordingUseCase {
     private readonly catalog: RecordingCatalogRepository,
     private readonly files: RecordingFileActionsPort,
     private readonly thumbnails: RecordingThumbnailPort,
+    private readonly previews?: RecordingPreviewPort,
   ) {}
 
   public async execute(recordingId: string): Promise<void> {
@@ -25,5 +30,6 @@ export class DeleteRecordingUseCase {
     await this.catalog.remove(recording.id);
     // Cache cleanup must not turn an already-successful Trash operation into a visible failure.
     await this.thumbnails.remove(recording.id).catch(() => undefined);
+    await this.previews?.remove(recording.id).catch(() => undefined);
   }
 }

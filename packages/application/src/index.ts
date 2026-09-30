@@ -12,6 +12,7 @@ export * from './use-cases/export-diagnostics';
 export * from './use-cases/export-edited-recording';
 export * from './use-cases/get-recording-thumbnail';
 export * from './use-cases/get-recording-media';
+export * from './use-cases/get-recording-preview';
 export * from './use-cases/get-preferences';
 export * from './use-cases/list-capture-sources';
 export * from './use-cases/list-recordings';

@@ -24,6 +24,12 @@ export interface RecordingThumbnailPort {
   remove(recordingId: string): Promise<void>;
 }
 
+/** Creates a renderer-compatible, disposable editing proxy without changing the source media. */
+export interface RecordingPreviewPort {
+  prepare(recording: RecordingMetadata): Promise<RecordingFilePath>;
+  remove(recordingId: string): Promise<void>;
+}
+
 export type PermissionSettingsTarget = 'screen-recording' | 'microphone';
 
 export interface SystemSettingsPort {

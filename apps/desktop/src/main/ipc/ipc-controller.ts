@@ -192,7 +192,7 @@ async function dispatchRequest(
           null,
       );
     case 'library.media-url':
-      await container.useCases.getRecordingMedia.execute(request.payload.recordingId);
+      await container.useCases.getRecordingPreview.execute(request.payload.recordingId);
       return successResponse(request, recordingMediaUrl(request.payload.recordingId));
     case 'library.rename':
       return successResponse(

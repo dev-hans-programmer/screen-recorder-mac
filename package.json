@@ -1,7 +1,7 @@
 {
   "name": "screen-recorder-workspace",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A native-feeling macOS screen recorder built with React, Electron, TypeScript, and Swift.",
   "packageManager": "pnpm@12.5.1",
   "engines": {

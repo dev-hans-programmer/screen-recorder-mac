@@ -123,6 +123,11 @@ function createMainWindow(): void {
           'library',
           'editor-posters',
         ),
+        editorPreviewCacheDirectory: path.join(
+          app.getPath('userData'),
+          'library',
+          'editor-previews',
+        ),
         preferencesFilePath: path.join(app.getPath('userData'), 'preferences.json'),
         diagnosticsFilePath: path.join(app.getPath('userData'), 'diagnostics', 'recordings.json'),
         diagnosticsReport,

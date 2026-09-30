@@ -10,6 +10,7 @@ import {
   mapNativeSource,
   parseNativeCapabilities,
   parseNativeEditedRecordingResult,
+  parseNativeRecordingPreviewResult,
   parseNativePermissions,
   parseNativeSources,
   toCaptureCapabilities,
@@ -105,6 +106,18 @@ describe('native bridge infrastructure', () => {
 
     expect(error).toBeInstanceOf(DomainError);
     expect(error.code).toBe('RECORDING_FINALIZATION_FAILURE');
+  });
+
+  it('validates the native editing preview response', () => {
+    expect(
+      parseNativeRecordingPreviewResult({
+        status: 'completed',
+        filePath: '/tmp/editor-preview.mp4',
+      }),
+    ).toEqual({ status: 'completed', filePath: '/tmp/editor-preview.mp4' });
+    expect(() => parseNativeRecordingPreviewResult({ status: 'completed' })).toThrowError(
+      DomainError,
+    );
   });
 
   it('prevents duplicate recording reservations while allowing idle reuse', () => {

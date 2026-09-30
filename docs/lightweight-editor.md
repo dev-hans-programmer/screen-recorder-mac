@@ -2,7 +2,7 @@
 
 ## Scope
 
-The editor provides a fast, non-destructive workflow for one recording at a time:
+The editor provides a timeline-first, non-destructive workflow for one recording at a time:
 
 - set trim-in and trim-out points;
 - use the original frame or centered 16:9, 4:3, and square crop presets;
@@ -11,6 +11,12 @@ The editor provides a fast, non-destructive workflow for one recording at a time
 - add and remove muted timeline ranges;
 - select a poster frame for the Library thumbnail; and
 - export a new Library item without changing the source recording.
+
+The workspace is arranged like a compact nonlinear editor: canvas and transport controls sit above
+a ruler-based video/audio timeline, with frame and export settings in an inspector. The timeline
+supports horizontal zoom and scrolling, click/drag scrubbing, draggable trim and mute handles, a
+poster-frame marker, and context menus on clips and mute ranges. Space toggles playback; arrow keys
+seek by half a second, or five seconds while Shift is held.
 
 The output keeps the source quality profile and frame rate. Compatible recordings export as MP4,
 Balanced recordings prefer HEVC MP4, and Master recordings prefer ProRes MOV. AVFoundation selects
@@ -29,6 +35,12 @@ contains a recording ID, not a filesystem path. The main process revalidates tha
 Library and forwards Chromium range requests to the approved local file. This keeps seeking fluid
 without granting renderer filesystem access.
 
+Electron cannot reliably decode HEVC or ProRes sources. The first time one of these recordings is
+opened, the Swift service creates a cached, 1280-pixel, 60 FPS H.264 editing proxy using
+AVFoundation. The
+preview protocol streams that disposable proxy, while all trims, crops, audio edits, thumbnails, and
+exports continue to use the untouched full-quality source. Compatible H.264 sources stream directly.
+
 Poster frames are generated from the exported file in Swift, staged under application data, and
 atomically imported into the existing thumbnail cache. A poster-cache failure does not discard an
 otherwise valid export; the Library can regenerate a thumbnail lazily.
@@ -44,11 +56,14 @@ otherwise valid export; the Library can regenerate a thumbnail lazily.
 
 Use a recording with visible motion and spoken or system audio.
 
-1. Open Library, choose **Actions → Edit**, and confirm preview playback and seeking work.
-2. Move In and Out, choose a crop preset, rotate 90 degrees, and verify the output dimensions update.
-3. Mark a mute range around audible content and choose a distinct playhead as the thumbnail.
-4. Export and confirm the app returns to Library with a second item while the original remains.
-5. Play the export in QuickTime and verify duration, crop, orientation, muted interval, and sync.
-6. Confirm the new Library card uses the selected frame and that Open and Reveal in Finder work.
-7. Repeat with Compatible, Balanced, and Master source recordings when those profiles are available.
-8. Start a recording and confirm an editor export is rejected until capture has stopped.
+1. Open Library, choose **Actions → Edit**, and confirm canvas playback and timeline scrubbing work.
+2. Drag both yellow clip edges, zoom and horizontally scroll the timeline, then verify the playhead
+   stays synchronized with the preview.
+3. Right-click the video clip and exercise Set In, Set Out, Add Mute, and Set Thumbnail actions.
+4. Drag both edges of a mute range, then right-click it and verify its range-specific menu.
+5. Choose a crop preset, rotate 90 degrees, and verify the output dimensions update.
+6. Mark a mute range around audible content and choose a distinct playhead as the thumbnail.
+7. Export and confirm the app returns to Library with a second item while the original remains.
+8. Play the export in QuickTime and verify duration, crop, orientation, muted interval, and sync.
+9. Confirm the new Library card uses the selected frame and that Open and Reveal in Finder work.
+10. Repeat with Compatible, Balanced, and Master sources when those profiles are available.

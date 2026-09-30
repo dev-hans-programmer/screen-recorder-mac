@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ChooseRecordingDirectoryUseCase,
   ExportEditedRecordingUseCase,
+  GetRecordingPreviewUseCase,
   PauseRecordingUseCase,
   RecoverInterruptedRecordingUseCase,
   ResumeRecordingUseCase,
@@ -19,6 +20,7 @@ import {
   type RecordingDiagnosticsRepository,
   type RecordingEditorExportRequest,
   type RecordingEditorPort,
+  type RecordingPreviewPort,
   type RecordingThumbnailPort,
   type RecordingCatalogRepository,
   type RecordingSessionRepository,
@@ -475,6 +477,73 @@ describe('recording application use cases', () => {
       ).execute(started.session.id),
     ).rejects.toMatchObject({ code: 'RECORDING_FINALIZATION_FAILURE' });
     expect(sessions.sessions.get(started.session.id)?.state).toBe('failed');
+  });
+
+  it('uses a renderer-compatible proxy for HEVC recordings', async () => {
+    const catalog = new FakeCatalog();
+    const source = createRecordingMetadataFromArtifact(
+      createRecordingArtifact({
+        id: 'source-preview',
+        filePath: createRecordingFilePath('/tmp/source-hevc.mp4'),
+        title: 'HEVC source',
+        createdAt: 100,
+        durationMs: createDurationMs(10_000),
+        width: 3840,
+        height: 2160,
+        frameRate: 60,
+        profileId: 'balanced',
+        codec: 'hevc',
+        hasSystemAudio: true,
+        hasMicrophone: false,
+        fileSizeBytes: 50_000,
+      }),
+    );
+    await catalog.save(source);
+    const prepared: string[] = [];
+    const previews: RecordingPreviewPort = {
+      prepare: async (recording) => {
+        prepared.push(recording.id);
+        return createRecordingFilePath('/tmp/source-preview-h264.mp4');
+      },
+      remove: async () => undefined,
+    };
+
+    const result = await new GetRecordingPreviewUseCase(catalog, previews).execute(source.id);
+
+    expect(result).toBe('/tmp/source-preview-h264.mp4');
+    expect(prepared).toEqual([source.id]);
+  });
+
+  it('streams H.264 recordings directly without generating a proxy', async () => {
+    const catalog = new FakeCatalog();
+    const source = createRecordingMetadataFromArtifact(
+      createRecordingArtifact({
+        id: 'source-compatible',
+        filePath: createRecordingFilePath('/tmp/source-h264.mp4'),
+        title: 'H.264 source',
+        createdAt: 100,
+        durationMs: createDurationMs(10_000),
+        width: 1920,
+        height: 1080,
+        frameRate: 60,
+        profileId: 'compatible',
+        codec: 'h264',
+        hasSystemAudio: false,
+        hasMicrophone: false,
+        fileSizeBytes: 25_000,
+      }),
+    );
+    await catalog.save(source);
+    const previews: RecordingPreviewPort = {
+      prepare: async () => {
+        throw new Error('H.264 must not be transcoded.');
+      },
+      remove: async () => undefined,
+    };
+
+    const result = await new GetRecordingPreviewUseCase(catalog, previews).execute(source.id);
+
+    expect(result).toBe(source.filePath);
   });
 
   it('exports a validated non-destructive edit and imports its poster frame', async () => {

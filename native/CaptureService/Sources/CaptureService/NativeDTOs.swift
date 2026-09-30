@@ -251,3 +251,13 @@ struct NativeEditedRecordingResult: Codable, Sendable, Equatable {
   let hasSystemAudio: Bool
   let hasMicrophone: Bool
 }
+
+struct RecordingPreviewPayload: Codable, Sendable, Equatable {
+  let inputPath: String
+  let outputPath: String
+}
+
+struct NativeRecordingPreviewResult: Codable, Sendable, Equatable {
+  let status: String
+  let filePath: String
+}

@@ -9,6 +9,7 @@ import {
   parseRecordingMediaUrl,
   recordingMediaUrl,
 } from '../src/main/infrastructure/recording-media-url';
+import { resolveByteRange } from '../src/main/infrastructure/recording-media-protocol';
 
 describe('lightweight editor model', () => {
   it('calculates centered crop presets and rotation-aware output dimensions', () => {
@@ -27,5 +28,16 @@ describe('lightweight editor model', () => {
     expect(parseRecordingMediaUrl(url)).toBe('recording:id/1');
     expect(parseRecordingMediaUrl(`${url}?path=/tmp/file`)).toBeUndefined();
     expect(parseRecordingMediaUrl('file:///tmp/recording.mp4')).toBeUndefined();
+  });
+
+  it('resolves media byte ranges for standards-compliant partial responses', () => {
+    expect(resolveByteRange(null, 1_000)).toBeUndefined();
+    expect(resolveByteRange('bytes=0-99', 1_000)).toEqual({ start: 0, end: 99 });
+    expect(resolveByteRange('bytes=900-', 1_000)).toEqual({ start: 900, end: 999 });
+    expect(resolveByteRange('bytes=-100', 1_000)).toEqual({ start: 900, end: 999 });
+    expect(resolveByteRange('bytes=900-1200', 1_000)).toEqual({ start: 900, end: 999 });
+    expect(resolveByteRange('bytes=1000-', 1_000)).toBeNull();
+    expect(resolveByteRange('bytes=20-10', 1_000)).toBeNull();
+    expect(resolveByteRange('bytes=0-1,4-5', 1_000)).toBeNull();
   });
 });

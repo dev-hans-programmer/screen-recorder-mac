@@ -5,6 +5,7 @@ actor CaptureService {
   private let discovery = SourceDiscovery()
   private let diagnostics = CaptureDiagnostics()
   private let editor = RecordingEditor()
+  private let previewGenerator = RecordingPreviewGenerator()
   private let streamCoordinator: CaptureStreamCoordinator
   private var configuration: CaptureConfiguration?
   private var state = "idle"
@@ -81,6 +82,7 @@ actor CaptureService {
             "resumeCapture",
             "stopCapture",
             "exportRecording",
+            "prepareRecordingPreview",
             "getHealth",
             "shutdown",
           ]
@@ -181,6 +183,24 @@ actor CaptureService {
         let result = try await editor.export(payload)
         state = "idle"
         NativeLog.capture.info("Edited recording exported")
+        return try encodePayload(result)
+      } catch {
+        state = "idle"
+        throw error
+      }
+
+    case "prepareRecordingPreview":
+      guard state == "idle" else {
+        throw NativeServiceError.invalidConfiguration(
+          "Recording previews can only be prepared while capture is idle."
+        )
+      }
+      let payload = try decodePayload(RecordingPreviewPayload.self, from: request.payload)
+      state = "previewing"
+      do {
+        let result = try await previewGenerator.prepare(payload)
+        state = "idle"
+        NativeLog.capture.info("Editing preview prepared")
         return try encodePayload(result)
       } catch {
         state = "idle"

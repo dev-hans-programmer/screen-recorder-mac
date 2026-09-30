@@ -8,6 +8,7 @@ import {
   ExportEditedRecordingUseCase,
   GetRecordingThumbnailUseCase,
   GetRecordingMediaUseCase,
+  GetRecordingPreviewUseCase,
   GetPreferencesUseCase,
   ListCaptureSourcesUseCase,
   ListRecordingsUseCase,
@@ -47,6 +48,7 @@ import {
 } from '../infrastructure/native/native-capture-adapter';
 import { NativeServiceSupervisor } from '../infrastructure/native/native-service-supervisor';
 import { NativeRecordingEditor } from '../infrastructure/native/native-recording-editor';
+import { NativeRecordingPreview } from '../infrastructure/native/native-recording-preview';
 
 class SystemClock implements Clock {
   public now(): number {
@@ -70,6 +72,7 @@ export interface ApplicationContainer {
     readonly exportDiagnostics: ExportDiagnosticsUseCase;
     readonly exportEditedRecording: ExportEditedRecordingUseCase;
     readonly getRecordingMedia: GetRecordingMediaUseCase;
+    readonly getRecordingPreview: GetRecordingPreviewUseCase;
     readonly getPreferences: GetPreferencesUseCase;
     readonly getRecordingThumbnail: GetRecordingThumbnailUseCase;
     readonly listCaptureSources: ListCaptureSourcesUseCase;
@@ -98,6 +101,7 @@ export interface ApplicationContainerOptions {
   readonly libraryDatabasePath: string;
   readonly thumbnailCacheDirectory: string;
   readonly editorThumbnailStagingDirectory: string;
+  readonly editorPreviewCacheDirectory: string;
   readonly preferencesFilePath: string;
   readonly diagnosticsFilePath: string;
   readonly diagnosticsReport: DiagnosticsReportPort;
@@ -161,6 +165,7 @@ export function createApplicationContainer(
     outputDirectory,
     thumbnailStagingDirectory: options.editorThumbnailStagingDirectory,
   });
+  const previews = new NativeRecordingPreview(supervisor, options.editorPreviewCacheDirectory);
 
   return {
     capture,
@@ -172,7 +177,7 @@ export function createApplicationContainer(
         options.recordingDirectoryPicker,
         options.defaultOutputDirectory,
       ),
-      deleteRecording: new DeleteRecordingUseCase(catalog, files, thumbnails),
+      deleteRecording: new DeleteRecordingUseCase(catalog, files, thumbnails, previews),
       exportDiagnostics: new ExportDiagnosticsUseCase(diagnostics, options.diagnosticsReport),
       exportEditedRecording: new ExportEditedRecordingUseCase(
         catalog,
@@ -184,6 +189,7 @@ export function createApplicationContainer(
         logger,
       ),
       getRecordingMedia: new GetRecordingMediaUseCase(catalog),
+      getRecordingPreview: new GetRecordingPreviewUseCase(catalog, previews),
       getPreferences: new GetPreferencesUseCase(preferences),
       getRecordingThumbnail: new GetRecordingThumbnailUseCase(catalog, thumbnails),
       listCaptureSources: new ListCaptureSourcesUseCase(capture),
