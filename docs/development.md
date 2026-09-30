@@ -27,6 +27,19 @@ pnpm dev
 The root command builds the Swift helper and then starts the Electron desktop workspace. This keeps
 the development helper path deterministic across fresh checkouts.
 
+## Build installable artifacts
+
+```bash
+pnpm make
+pnpm artifacts:verify
+```
+
+This builds the Swift service and Electron application for Apple Silicon and Intel, then emits a
+Universal 2 DMG, ZIP, and checksum manifest. Apple Developer credentials are not needed. Use the
+Node version in `.node-version` before installing dependencies or packaging. See
+[packaging.md](packaging.md) for signing options and [installation.md](installation.md) for the
+first-run flow.
+
 ## Validation commands
 
 ```bash

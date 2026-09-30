@@ -9,7 +9,8 @@
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",
-    "make": "electron-forge make",
+    "make": "electron-forge make && node ../../scripts/generate-checksums.mjs out/make",
+    "make:universal": "SCREEN_RECORDER_NATIVE_BUILD_ARCH=universal electron-forge make --arch=universal && node ../../scripts/generate-checksums.mjs out/make",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",

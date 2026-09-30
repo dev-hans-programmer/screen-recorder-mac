@@ -554,25 +554,25 @@ A task is complete when:
 
 ## Phase 13 — Packaging and local installation
 
-- [ ] T130 Package the native helper outside the ASAR archive.
+- [x] T130 Package the native helper outside the ASAR archive.
   - Include development and packaged paths.
   - Ensure executable permissions are preserved.
   - Acceptance: packaged Electron app can launch the helper.
 
-- [ ] T131 Configure macOS artifacts.
+- [x] T131 Configure macOS artifacts.
   - Generate `.app`.
   - Generate `.dmg`.
   - Generate `.zip`.
   - Generate checksums.
   - Acceptance: artifacts can be downloaded and installed locally.
 
-- [ ] T132 Make signing and notarization optional.
+- [x] T132 Make signing and notarization optional.
   - Do not require Apple Developer secrets for the default CI path.
   - Allow signing/notarization configuration through optional CI secrets later.
   - Keep the build usable for local development and artifact testing without credentials.
   - Acceptance: CI succeeds when signing secrets are absent.
 
-- [ ] T133 Document first-run installation behavior.
+- [x] T133 Document first-run installation behavior.
   - Explain how to open the downloaded app.
   - Explain expected macOS permission prompts.
   - Document any Gatekeeper behavior for unsigned builds.

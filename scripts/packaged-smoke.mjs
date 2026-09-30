@@ -11,7 +11,12 @@ function findPackagedApp() {
   if (explicitApp) return path.resolve(explicitApp);
   const out = path.resolve('apps/desktop/out');
   if (!existsSync(out)) return undefined;
-  for (const directory of readdirSync(out, { withFileTypes: true })) {
+  const directories = readdirSync(out, { withFileTypes: true }).sort((left, right) => {
+    const leftPriority = left.name.includes('darwin-universal') ? 0 : 1;
+    const rightPriority = right.name.includes('darwin-universal') ? 0 : 1;
+    return leftPriority - rightPriority || left.name.localeCompare(right.name);
+  });
+  for (const directory of directories) {
     const candidate = path.join(out, directory.name, 'Screen Recorder.app');
     if (directory.isDirectory() && existsSync(candidate)) return candidate;
   }
