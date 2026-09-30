@@ -136,6 +136,7 @@ function createApi() {
     openRecordingsFolder: vi.fn(async () => undefined),
     openPermissionSettings: vi.fn(async () => undefined),
     relaunchApplication: vi.fn(async () => undefined),
+    exportDiagnostics: vi.fn(async () => '/tmp/diagnostics.json'),
     getPreferences: vi.fn(async () => currentPreferences),
     updatePreferences: vi.fn(async (patch) => {
       currentPreferences = {
@@ -287,6 +288,18 @@ describe('RendererStore', () => {
 
     expect(fixture.api.updatePreferences).toHaveBeenCalledWith({ onboardingCompleted: true });
     expect(store.getState().preferences?.onboardingCompleted).toBe(true);
+  });
+
+  it('exports a privacy-safe diagnostics report from settings', async () => {
+    const fixture = createApi();
+    const store = new RendererStore(fixture.api);
+    await store.initialize();
+
+    await store.exportDiagnostics();
+
+    expect(fixture.api.exportDiagnostics).toHaveBeenCalledOnce();
+    expect(store.getState().notice).toContain('exported successfully');
+    expect(store.getState().operation).toBe('idle');
   });
 
   it('blocks capture and offers an app restart when macOS requires one', async () => {

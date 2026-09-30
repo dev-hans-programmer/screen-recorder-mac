@@ -174,6 +174,13 @@ describe('native bridge infrastructure', () => {
           hasSystemAudio: false,
           hasMicrophone: false,
           hardwareEncoder: true,
+          capturedFrames: 29,
+          encodedFrames: 27,
+          droppedFrames: 2,
+          systemAudioSamples: 0,
+          microphoneSamples: 0,
+          averageFileWriteBytesPerSecond: 4_551,
+          peakFileWriteBytesPerSecond: 8_192,
         };
       }
       if (command === 'getHealth') {
@@ -207,9 +214,16 @@ describe('native bridge infrastructure', () => {
     now += 100;
     await engine.resume(handle.id);
     now += 800;
-    const artifact = await engine.stop(handle.id);
+    const result = await engine.stop(handle.id);
 
-    expect(artifact.filePath).toBe('/tmp/recording.mp4');
+    expect(result.artifact.filePath).toBe('/tmp/recording.mp4');
+    expect(result.diagnostics).toMatchObject({
+      width: 960,
+      height: 600,
+      actualFrameCount: 27,
+      droppedFrameCount: 2,
+      encoder: 'hardware',
+    });
     expect(requestSpy.mock.calls.map(([command]) => command)).toEqual([
       'configureCapture',
       'startCapture',

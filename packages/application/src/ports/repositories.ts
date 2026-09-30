@@ -1,6 +1,7 @@
 import type {
   AppPreferences,
   RecordingArtifact,
+  RecordingDiagnostics,
   RecordingMetadata,
   RecordingSession,
 } from '@screen-recorder/domain';
@@ -21,6 +22,11 @@ export interface RecordingCatalogRepository {
 export interface PreferencesRepository {
   get(): Promise<AppPreferences>;
   save(preferences: AppPreferences): Promise<void>;
+}
+
+export interface RecordingDiagnosticsRepository {
+  listRecent(limit: number): Promise<readonly RecordingDiagnostics[]>;
+  save(diagnostics: RecordingDiagnostics): Promise<void>;
 }
 
 /** Port names used by the application layer stay independent of persistence technology. */

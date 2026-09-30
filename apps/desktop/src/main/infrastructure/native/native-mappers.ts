@@ -59,6 +59,13 @@ export interface NativeRecordingResultDto {
   readonly hasSystemAudio: boolean;
   readonly hasMicrophone: boolean;
   readonly hardwareEncoder: boolean;
+  readonly capturedFrames: number;
+  readonly encodedFrames: number;
+  readonly droppedFrames: number;
+  readonly systemAudioSamples: number;
+  readonly microphoneSamples: number;
+  readonly averageFileWriteBytesPerSecond: number;
+  readonly peakFileWriteBytesPerSecond: number;
 }
 
 export interface NativeHealthDto {
@@ -241,6 +248,19 @@ export function parseNativeRecordingResult(value: unknown): NativeRecordingResul
     hasSystemAudio: booleanValue(result.hasSystemAudio, 'hasSystemAudio'),
     hasMicrophone: booleanValue(result.hasMicrophone, 'hasMicrophone'),
     hardwareEncoder: booleanValue(result.hardwareEncoder, 'hardwareEncoder'),
+    capturedFrames: finiteNumber(result.capturedFrames, 'capturedFrames'),
+    encodedFrames: finiteNumber(result.encodedFrames, 'encodedFrames'),
+    droppedFrames: finiteNumber(result.droppedFrames, 'droppedFrames'),
+    systemAudioSamples: finiteNumber(result.systemAudioSamples, 'systemAudioSamples'),
+    microphoneSamples: finiteNumber(result.microphoneSamples, 'microphoneSamples'),
+    averageFileWriteBytesPerSecond: finiteNumber(
+      result.averageFileWriteBytesPerSecond,
+      'averageFileWriteBytesPerSecond',
+    ),
+    peakFileWriteBytesPerSecond: finiteNumber(
+      result.peakFileWriteBytesPerSecond,
+      'peakFileWriteBytesPerSecond',
+    ),
   };
 }
 

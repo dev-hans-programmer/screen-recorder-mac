@@ -1724,6 +1724,29 @@ select:focus-visible {
   grid-template-columns: auto minmax(180px, 1fr) auto auto;
 }
 
+.diagnostics-export-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-muted);
+}
+
+.diagnostics-export-card strong {
+  color: var(--text);
+  font-size: 0.77rem;
+}
+
+.diagnostics-export-card p {
+  margin: 5px 0 0;
+  color: var(--text-faint);
+  font-size: 0.67rem;
+  line-height: 1.5;
+}
+
 .field-wide {
   max-width: 620px;
 }
@@ -1886,7 +1909,8 @@ select:focus-visible {
 
   .permission-setup-row,
   .settings-permission-row,
-  .permission-recovery-card {
+  .permission-recovery-card,
+  .diagnostics-export-card {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
@@ -1897,7 +1921,8 @@ select:focus-visible {
   }
 
   .settings-permission-row > .button,
-  .permission-recovery-card > .button {
+  .permission-recovery-card > .button,
+  .diagnostics-export-card > .button {
     grid-column: 2;
     justify-self: start;
   }

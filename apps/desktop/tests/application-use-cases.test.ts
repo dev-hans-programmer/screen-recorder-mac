@@ -13,6 +13,7 @@ import {
   type Clock,
   type IdGenerator,
   type RecordingEnginePort,
+  type RecordingDiagnosticsRepository,
   type RecordingCatalogRepository,
   type RecordingSessionRepository,
   type StartRecordingDependencies,
@@ -23,13 +24,14 @@ import {
   createCaptureSource,
   createDurationMs,
   createRecordingArtifact,
+  createRecordingDiagnostics,
   createRecordingFilePath,
   createRecordingRequest,
   defaultAppPreferences,
   type AppPreferences,
   type CapturePermissions,
   type CaptureSource,
-  type RecordingArtifact,
+  type RecordingDiagnostics,
   type RecordingMetadata,
   type RecordingRequest,
 } from '@screen-recorder/domain';
@@ -154,10 +156,10 @@ class FakeEngine implements RecordingEnginePort {
     return Promise.resolve();
   }
 
-  public stop(handleId: string): Promise<RecordingArtifact> {
+  public stop(handleId: string): ReturnType<RecordingEnginePort['stop']> {
     this.stopped.push(handleId);
-    return Promise.resolve(
-      createRecordingArtifact({
+    return Promise.resolve({
+      artifact: createRecordingArtifact({
         id: 'artifact-1',
         filePath: createRecordingFilePath('/tmp/recording.mp4'),
         title: 'Recording',
@@ -172,7 +174,38 @@ class FakeEngine implements RecordingEnginePort {
         hasMicrophone: false,
         fileSizeBytes: 2048,
       }),
-    );
+      diagnostics: createRecordingDiagnostics({
+        schemaVersion: 1,
+        sessionId: 'session-1',
+        recordedAt: 700,
+        width: 3840,
+        height: 2160,
+        durationMs: 500,
+        capturedFrameCount: 16,
+        actualFrameCount: 15,
+        droppedFrameCount: 1,
+        codec: 'hevc',
+        encoder: 'hardware',
+        systemAudio: 'disabled',
+        microphone: 'disabled',
+        fileSizeBytes: 2048,
+        averageFileWriteBytesPerSecond: 4096,
+        peakFileWriteBytesPerSecond: 8192,
+      }),
+    });
+  }
+}
+
+class FakeDiagnostics implements RecordingDiagnosticsRepository {
+  public readonly values: RecordingDiagnostics[] = [];
+
+  public listRecent(limit: number): Promise<readonly RecordingDiagnostics[]> {
+    return Promise.resolve(this.values.slice(0, limit));
+  }
+
+  public save(diagnostics: RecordingDiagnostics): Promise<void> {
+    this.values.push(diagnostics);
+    return Promise.resolve();
   }
 }
 
@@ -246,9 +279,11 @@ describe('recording application use cases', () => {
       started.session.id,
     );
     const catalog = new FakeCatalog();
+    const diagnostics = new FakeDiagnostics();
     const artifact = await new StopRecordingUseCase(
       sessions,
       catalog,
+      diagnostics,
       engine,
       dependencies.clock,
       events,
@@ -262,6 +297,7 @@ describe('recording application use cases', () => {
     expect(engine.resumed).toEqual(['engine-1']);
     expect(engine.stopped).toEqual(['engine-1']);
     expect(catalog.recordings.get(artifact.id)).toMatchObject({ schemaVersion: 1, codec: 'hevc' });
+    expect(diagnostics.values[0]).toMatchObject({ actualFrameCount: 15, encoder: 'hardware' });
     expect(events.values.every((event) => event.version === 1)).toBe(true);
     expect(events.values.some((event) => event.type === 'recording.completed')).toBe(true);
   });

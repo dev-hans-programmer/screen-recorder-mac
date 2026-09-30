@@ -37,6 +37,7 @@ final class PermissionInspector: @unchecked Sendable {
     let wasRequested = screenPermissionWasRequested
     lock.unlock()
     let screenRecording = screenRecordingState(wasRequested: wasRequested)
+    let microphone = microphoneState()
 
     lock.lock()
     if screenPermissionGrantedAtLaunch, screenRecording != .granted {
@@ -46,15 +47,20 @@ final class PermissionInspector: @unchecked Sendable {
       (!screenPermissionGrantedAtLaunch || screenPermissionWasRevokedAfterLaunch)
     lock.unlock()
 
+    NativeLog.permissions.debug(
+      "Permission state: screen=\(screenRecording.rawValue, privacy: .public), microphone=\(microphone.rawValue, privacy: .public), restart=\(requiresRestart)"
+    )
+
     return NativePermissions(
       screenRecording: screenRecording,
-      microphone: microphoneState(),
+      microphone: microphone,
       // ScreenCaptureKit may not see newly granted or re-granted TCC access until process restart.
       screenRecordingRequiresRestart: requiresRestart
     )
   }
 
   func request(microphone: Bool) async -> NativePermissions {
+    NativeLog.permissions.info("Requesting capture permissions; microphone=\(microphone)")
     markScreenPermissionRequested()
 
 #if canImport(CoreGraphics)

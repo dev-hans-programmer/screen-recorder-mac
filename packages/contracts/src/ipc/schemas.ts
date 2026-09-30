@@ -249,6 +249,7 @@ export const ipcRequestSchema = z.discriminatedUnion('command', [
     z.object({ target: z.enum(['screen-recording', 'microphone']) }).strict(),
   ),
   requestSchema('app.relaunch', emptyPayloadSchema),
+  requestSchema('diagnostics.export', emptyPayloadSchema),
   requestSchema('preferences.get', emptyPayloadSchema),
   requestSchema('preferences.update', z.object({ patch: appPreferencesPatchSchema }).strict()),
 ]);
@@ -288,6 +289,7 @@ const responseDataSchemas = {
   'library.open-folder': z.null(),
   'system.open-permission-settings': z.null(),
   'app.relaunch': z.null(),
+  'diagnostics.export': z.string().min(1).nullable(),
   'preferences.get': appPreferencesSchema,
   'preferences.update': appPreferencesSchema,
 } as const;

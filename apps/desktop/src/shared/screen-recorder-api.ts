@@ -38,6 +38,7 @@ export interface ScreenRecorderApi {
   openRecordingsFolder(): Promise<void>;
   openPermissionSettings(target: 'screen-recording' | 'microphone'): Promise<void>;
   relaunchApplication(): Promise<void>;
+  exportDiagnostics(): Promise<string | null>;
   getPreferences(): Promise<AppPreferencesDto>;
   updatePreferences(patch: AppPreferencesPatchDto): Promise<AppPreferencesDto>;
   onEvent(listener: (event: IpcEvent) => void): () => void;

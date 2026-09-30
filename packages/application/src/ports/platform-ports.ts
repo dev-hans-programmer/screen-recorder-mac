@@ -1,4 +1,8 @@
-import type { RecordingFilePath, RecordingMetadata } from '@screen-recorder/domain';
+import type {
+  RecordingDiagnostics,
+  RecordingFilePath,
+  RecordingMetadata,
+} from '@screen-recorder/domain';
 
 export interface FileSystemPort {
   ensureDirectory(path: string): Promise<void>;
@@ -23,6 +27,10 @@ export type PermissionSettingsTarget = 'screen-recording' | 'microphone';
 
 export interface SystemSettingsPort {
   openPermissionSettings(target: PermissionSettingsTarget): Promise<void>;
+}
+
+export interface DiagnosticsReportPort {
+  exportReport(recordings: readonly RecordingDiagnostics[]): Promise<string | undefined>;
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';

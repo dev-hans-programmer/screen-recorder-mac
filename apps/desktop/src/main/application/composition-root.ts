@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   CheckCapturePermissionsUseCase,
   DeleteRecordingUseCase,
+  ExportDiagnosticsUseCase,
   GetRecordingThumbnailUseCase,
   GetPreferencesUseCase,
   ListCaptureSourcesUseCase,
@@ -23,14 +24,15 @@ import {
   type ApplicationEventPublisher,
   type CapturePort,
   type Clock,
+  type DiagnosticsReportPort,
   type IdGenerator,
   type Logger,
   type RecordingEnginePort,
 } from '@screen-recorder/application';
 
-import { createConsoleLogger } from '../infrastructure/logger';
 import { InMemoryRecordingRepository } from '../infrastructure/in-memory-repositories';
 import { JsonPreferencesRepository } from '../infrastructure/json-preferences-repository';
+import { JsonRecordingDiagnosticsRepository } from '../infrastructure/json-recording-diagnostics-repository';
 import { MacOsSystemSettings } from '../infrastructure/macos-system-settings';
 import { ElectronRecordingFileActions } from '../infrastructure/recording-file-actions';
 import { RecordingThumbnailService } from '../infrastructure/recording-thumbnail-service';
@@ -59,6 +61,7 @@ export interface ApplicationContainer {
   readonly useCases: {
     readonly checkCapturePermissions: CheckCapturePermissionsUseCase;
     readonly deleteRecording: DeleteRecordingUseCase;
+    readonly exportDiagnostics: ExportDiagnosticsUseCase;
     readonly getPreferences: GetPreferencesUseCase;
     readonly getRecordingThumbnail: GetRecordingThumbnailUseCase;
     readonly listCaptureSources: ListCaptureSourcesUseCase;
@@ -87,16 +90,22 @@ export interface ApplicationContainerOptions {
   readonly libraryDatabasePath: string;
   readonly thumbnailCacheDirectory: string;
   readonly preferencesFilePath: string;
+  readonly diagnosticsFilePath: string;
+  readonly diagnosticsReport: DiagnosticsReportPort;
 }
 
 export function createApplicationContainer(
   events: ApplicationEventPublisher,
   options: ApplicationContainerOptions,
-  logger: Logger = createConsoleLogger(),
+  logger: Logger,
 ): ApplicationContainer {
   const sessions = new InMemoryRecordingRepository();
   const preferences = new JsonPreferencesRepository({
     filePath: options.preferencesFilePath,
+    logger,
+  });
+  const diagnostics = new JsonRecordingDiagnosticsRepository({
+    filePath: options.diagnosticsFilePath,
     logger,
   });
   const catalog = new SqliteRecordingCatalog({ databasePath: options.libraryDatabasePath, logger });
@@ -109,6 +118,11 @@ export function createApplicationContainer(
     executablePath: options.nativeServicePath,
     clientVersion: '0.1.0',
     onFailure: (failure) => {
+      logger.error('Native CaptureService failed.', {
+        operation: failure.operation,
+        code: failure.error.code,
+        sessionId: failure.sessionId,
+      });
       events.publish({
         version: 1,
         type: 'native-service.failed',
@@ -125,6 +139,7 @@ export function createApplicationContainer(
     supervisor,
     clock,
     events,
+    logger,
     outputDirectory: async () => {
       const preferencesSnapshot = await preferences.get();
       return preferencesSnapshot.outputDirectory.trim() || options.defaultOutputDirectory();
@@ -137,6 +152,7 @@ export function createApplicationContainer(
     useCases: {
       checkCapturePermissions: new CheckCapturePermissionsUseCase(capture),
       deleteRecording: new DeleteRecordingUseCase(catalog, files, thumbnails),
+      exportDiagnostics: new ExportDiagnosticsUseCase(diagnostics, options.diagnosticsReport),
       getPreferences: new GetPreferencesUseCase(preferences),
       getRecordingThumbnail: new GetRecordingThumbnailUseCase(catalog, thumbnails),
       listCaptureSources: new ListCaptureSourcesUseCase(capture),
@@ -161,7 +177,14 @@ export function createApplicationContainer(
         ids,
         events,
       }),
-      stopRecording: new StopRecordingUseCase(sessions, catalog, engine, clock, events),
+      stopRecording: new StopRecordingUseCase(
+        sessions,
+        catalog,
+        diagnostics,
+        engine,
+        clock,
+        events,
+      ),
       updatePreferences: new UpdatePreferencesUseCase(preferences),
       validateRecordingRequest: new ValidateRecordingRequestUseCase(capture),
     },

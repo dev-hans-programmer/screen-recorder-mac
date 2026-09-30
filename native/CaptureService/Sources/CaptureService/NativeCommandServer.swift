@@ -1,5 +1,4 @@
 import Foundation
-import OSLog
 
 public struct NativeCommandServer {
   private let service: CaptureService
@@ -35,11 +34,6 @@ public struct NativeCommandServer {
 /// Serializes stdout writes from concurrently handled commands so each response remains one
 /// complete newline-delimited JSON message.
 private actor NativeResponseWriter {
-  private let logger = Logger(
-    subsystem: "com.screenrecorder.capture-service",
-    category: "protocol"
-  )
-
   func write(_ response: NativeResponse) {
     do {
       let data = try JSONEncoder().encode(response)
@@ -47,7 +41,9 @@ private actor NativeResponseWriter {
       message.append(0x0a)
       FileHandle.standardOutput.write(message)
     } catch {
-      logger.error("Unable to encode response: \(error.localizedDescription, privacy: .public)")
+      NativeLog.protocolLog.error(
+        "Unable to encode response: \(error.localizedDescription, privacy: .public)"
+      )
     }
   }
 }

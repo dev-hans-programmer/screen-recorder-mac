@@ -26,7 +26,8 @@ export type Operation =
   | 'resuming'
   | 'stopping'
   | 'library-action'
-  | 'saving-preferences';
+  | 'saving-preferences'
+  | 'exporting-diagnostics';
 
 export interface RecordingProgress {
   readonly durationMs: number;
@@ -460,6 +461,24 @@ export class RendererStore {
 
   public async completeOnboarding(): Promise<void> {
     await this.updatePreferences({ onboardingCompleted: true });
+  }
+
+  public async exportDiagnostics(): Promise<void> {
+    this.setState({ operation: 'exporting-diagnostics', error: null });
+    try {
+      const filePath = await this.api.exportDiagnostics();
+      this.setState({
+        operation: 'idle',
+        ...(filePath === null
+          ? { notice: 'Diagnostics export cancelled.' }
+          : { notice: 'Diagnostics report exported successfully.' }),
+      });
+    } catch (error: unknown) {
+      this.setState({
+        operation: 'idle',
+        error: errorMessage(error, 'Diagnostics could not be exported.'),
+      });
+    }
   }
 
   public runRecoveryAction(): void {

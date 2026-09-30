@@ -1,8 +1,11 @@
 import { DomainError } from '@screen-recorder/domain';
 
-import type { RecordingEngineHandle, RecordingEnginePort } from '@screen-recorder/application';
+import type {
+  RecordingEngineHandle,
+  RecordingEnginePort,
+  RecordingEngineStopResult,
+} from '@screen-recorder/application';
 import type { ValidatedRecordingRequest } from '@screen-recorder/application';
-import type { RecordingArtifact } from '@screen-recorder/domain';
 
 /** The native engine is intentionally unavailable until the Swift service phase. */
 export class UnconfiguredRecordingEngine implements RecordingEnginePort {
@@ -26,7 +29,7 @@ export class UnconfiguredRecordingEngine implements RecordingEnginePort {
     return Promise.reject(this.unavailableError());
   }
 
-  public stop(_handleId: string): Promise<RecordingArtifact> {
+  public stop(_handleId: string): Promise<RecordingEngineStopResult> {
     return Promise.reject(this.unavailableError());
   }
 

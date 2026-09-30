@@ -223,6 +223,13 @@ async function dispatchRequest(
         });
       }, 100);
       return successResponse(request, null);
+    case 'diagnostics.export': {
+      const filePath = await container.useCases.exportDiagnostics.execute();
+      container.logger.info(
+        filePath === undefined ? 'Diagnostics export was cancelled.' : 'Diagnostics were exported.',
+      );
+      return successResponse(request, filePath ?? null);
+    }
     case 'preferences.get':
       return successResponse(
         request,

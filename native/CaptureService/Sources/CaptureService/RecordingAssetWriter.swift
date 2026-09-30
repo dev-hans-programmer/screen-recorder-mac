@@ -153,6 +153,13 @@ final class RecordingAssetWriter: @unchecked Sendable {
     self.hardwareEncoder = NativeEncoderCapabilities.isHardwareEncoderAvailable(
       for: configuration.profileId
     )
+    diagnostics.beginRecording()
+    NativeLog.encoding.info(
+      "Preparing \(configuration.profileId.codec.rawValue, privacy: .public) encoder; hardware=\(self.hardwareEncoder)"
+    )
+    NativeLog.audio.info(
+      "Audio tracks configured; system=\(configuration.systemAudio), microphone=\(configuration.microphone)"
+    )
 
     let outputDirectory = URL(fileURLWithPath: configuration.outputDirectory, isDirectory: true)
       .standardizedFileURL
@@ -260,6 +267,7 @@ final class RecordingAssetWriter: @unchecked Sendable {
     queue.async { [weak self] in
       guard let self, !self.isPaused, !self.finishRequested else { return }
       self.isPaused = true
+      self.diagnostics.setPaused(true)
       self.pauseStartedAt = self.lastSourceVideoTimestamp
     }
   }
@@ -268,6 +276,7 @@ final class RecordingAssetWriter: @unchecked Sendable {
     queue.async { [weak self] in
       guard let self, self.isPaused, !self.finishRequested else { return }
       self.isPaused = false
+      self.diagnostics.setPaused(false)
     }
   }
 
@@ -291,6 +300,13 @@ final class RecordingAssetWriter: @unchecked Sendable {
     }
   }
 
+  func sampleFileWriteMetrics() {
+    let fileSize = (try? FileManager.default.attributesOfItem(atPath: partialURL.path)[.size] as? NSNumber)
+      .map(\.int64Value)
+      ?? 0
+    diagnostics.recordFileSize(bytes: fileSize)
+  }
+
   private func appendOnQueue(sampleBuffer: CMSampleBuffer, sampleKind: NativeSampleKind) {
     guard !finishRequested, failureMessage == nil else { return }
     guard CMSampleBufferIsValid(sampleBuffer) else {
@@ -304,10 +320,7 @@ final class RecordingAssetWriter: @unchecked Sendable {
       return
     }
 
-    if isPaused {
-      diagnostics.recordWriterDrop(sampleKind: sampleKind)
-      return
-    }
+    if isPaused { return }
 
     if sampleKind == .video, !hasStartedWriting {
       writer.startWriting()
@@ -411,9 +424,7 @@ final class RecordingAssetWriter: @unchecked Sendable {
       lastMicrophoneTimestamp = adjustedTimestamp
     }
 
-    diagnostics.recordEncodedSample(
-      byteCount: Int64(max(0, CMSampleBufferGetTotalSampleSize(adjustedSampleBuffer)))
-    )
+    diagnostics.recordEncodedSample(sampleKind: sampleKind)
   }
 
   private func finishOnQueue(
@@ -489,6 +500,17 @@ final class RecordingAssetWriter: @unchecked Sendable {
       .map(\.int64Value)
       ?? 0
     let durationSeconds = durationSecondsOnQueue()
+    let durationMs = durationSeconds * 1_000
+    let summary = diagnostics.completedSummary(
+      fileSizeBytes: fileSize,
+      durationMs: durationMs
+    )
+    NativeLog.encoding.info(
+      "Encoding completed; frames=\(summary.encodedFrames), dropped=\(summary.droppedFrames), averageWriteRate=\(summary.averageFileWriteBytesPerSecond), peakWriteRate=\(summary.peakFileWriteBytesPerSecond)"
+    )
+    NativeLog.audio.info(
+      "Audio samples written; system=\(summary.systemAudioSamples), microphone=\(summary.microphoneSamples)"
+    )
     diagnostics.setWriterError(nil, partialOutputPath: nil)
 
     return NativeRecordingResult(
@@ -500,12 +522,19 @@ final class RecordingAssetWriter: @unchecked Sendable {
       width: configuration.width,
       height: configuration.height,
       frameRate: configuration.frameRate,
-      durationMs: durationSeconds * 1_000,
+      durationMs: durationMs,
       pausedDurationMs: totalPausedDurationSeconds * 1_000,
       fileSizeBytes: fileSize,
       hasSystemAudio: configuration.systemAudio,
       hasMicrophone: configuration.microphone,
-      hardwareEncoder: hardwareEncoder
+      hardwareEncoder: hardwareEncoder,
+      capturedFrames: summary.capturedFrames,
+      encodedFrames: summary.encodedFrames,
+      droppedFrames: summary.droppedFrames,
+      systemAudioSamples: summary.systemAudioSamples,
+      microphoneSamples: summary.microphoneSamples,
+      averageFileWriteBytesPerSecond: summary.averageFileWriteBytesPerSecond,
+      peakFileWriteBytesPerSecond: summary.peakFileWriteBytesPerSecond
     )
   }
 

@@ -2,6 +2,7 @@ export * from './capture/capture-permissions';
 export * from './capture/capture-region';
 export * from './capture/capture-source';
 export * from './capture/capture-source-selection';
+export * from './diagnostics/recording-diagnostics';
 export * from './errors/domain-error';
 export * from './library/file-path';
 export * from './library/recording-artifact';

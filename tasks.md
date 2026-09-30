@@ -459,17 +459,17 @@ A task is complete when:
 
 ## Phase 11 — Diagnostics, logging, and observability
 
-- [ ] T110 Add structured TypeScript logging.
+- [x] T110 Add structured TypeScript logging.
   - Log lifecycle, state transitions, failures, and performance summaries.
   - Redact sensitive paths where appropriate.
   - Rotate logs.
   - Acceptance: logs are useful without containing raw media or unnecessary personal data.
 
-- [ ] T111 Add native OS logging.
+- [x] T111 Add native OS logging.
   - Use `OSLog` categories for capture, encoding, audio, permissions, and protocol.
   - Acceptance: native failures can be investigated from Console or exported diagnostics.
 
-- [ ] T112 Add recording diagnostics.
+- [x] T112 Add recording diagnostics.
   - Actual width and height.
   - Actual frame count and duration.
   - Dropped frames.
@@ -478,7 +478,7 @@ A task is complete when:
   - Average and peak file-write rate.
   - Acceptance: diagnostics are available for support and performance testing.
 
-- [ ] T113 Add an exportable diagnostics report.
+- [x] T113 Add an exportable diagnostics report.
   - Include app version, Electron version, macOS version, hardware summary, and recent errors.
   - Exclude recording content.
   - Acceptance: user can export a support report without exposing media files.

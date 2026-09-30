@@ -45,7 +45,7 @@ Copy `apps/desktop/.env.example` to a local `.env` file only when needed. Do not
 | `SCREEN_RECORDER_LOG_LEVEL` | `silent`, `error`, `warn`, `info`, `debug` | `info`  | Controls future main-process logging       |
 | `SCREEN_RECORDER_DEVTOOLS`  | `0`, `1`                                   | `0`     | Opens Chromium DevTools during development |
 
-## Expected Phase 10 behavior
+## Expected Phase 11 behavior
 
 The app opens a responsive recorder workspace with Recorder, Library, and Settings navigation. The
 workspace loads native capture sources, supports display/window/application selection, region
@@ -63,6 +63,11 @@ Preferences now survive restarts in a versioned, atomic JSON store. A first-run 
 Screen Recording and optional microphone access, while Recorder and Settings expose recovery
 actions for denied or revoked access, required helper restarts, and stale capture sources. See
 [preferences-and-permissions.md](preferences-and-permissions.md) for storage and recovery behavior.
+
+The main process now emits rotated, redacted structured logs; CaptureService emits categorized
+macOS unified logs; and every completed recording retains path-free performance diagnostics. A user
+can export a privacy-safe JSON support report from Settings. See
+[diagnostics.md](diagnostics.md) for fields, retention, privacy rules, and Console inspection.
 
 See [security.md](security.md) for the Electron boundary and IPC rules.
 

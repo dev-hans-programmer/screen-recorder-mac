@@ -72,6 +72,41 @@ describe('secure preload API', () => {
     expect(removedListener).toBe(registeredListener);
   });
 
+  it('exposes diagnostics export without granting renderer filesystem access', async () => {
+    const calls: unknown[] = [];
+    const api = createScreenRecorderApi(
+      {
+        invoke: async (channel, request) => {
+          calls.push({ channel, request });
+          const typedRequest = request as { readonly requestId: string; readonly command: string };
+          return {
+            protocolVersion,
+            requestId: typedRequest.requestId,
+            command: typedRequest.command,
+            ok: true,
+            data: '/tmp/support.json',
+          };
+        },
+        on: () => undefined,
+        removeListener: () => undefined,
+      },
+      () => 'diagnostics-request',
+    );
+
+    await expect(api.exportDiagnostics()).resolves.toBe('/tmp/support.json');
+    expect(calls).toEqual([
+      {
+        channel: ipcChannels.command,
+        request: {
+          protocolVersion,
+          requestId: 'diagnostics-request',
+          command: 'diagnostics.export',
+          payload: {},
+        },
+      },
+    ]);
+  });
+
   it('keeps region selection and shortcut channels purpose-built', async () => {
     const calls: unknown[] = [];
     const sent: unknown[] = [];

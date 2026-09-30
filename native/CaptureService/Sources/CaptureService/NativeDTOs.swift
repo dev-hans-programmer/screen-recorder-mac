@@ -199,4 +199,11 @@ struct NativeRecordingResult: Codable, Sendable, Equatable {
   let hasSystemAudio: Bool
   let hasMicrophone: Bool
   let hardwareEncoder: Bool
+  let capturedFrames: Int
+  let encodedFrames: Int
+  let droppedFrames: Int
+  let systemAudioSamples: Int
+  let microphoneSamples: Int
+  let averageFileWriteBytesPerSecond: Double
+  let peakFileWriteBytesPerSecond: Double
 }

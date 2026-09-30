@@ -58,10 +58,22 @@ public enum CaptureServiceSmokeChecks {
     }
 
     let diagnostics = CaptureDiagnostics(maxPendingSamples: 2)
+    diagnostics.beginRecording(at: 0)
+    diagnostics.record(sampleKind: .video, timestamp: 0, isValid: true)
     diagnostics.record(sampleKind: .video, timestamp: nil, isValid: false)
+    diagnostics.recordEncodedSample(sampleKind: .video)
+    diagnostics.recordFileSize(bytes: 1_000, at: 1)
+    let summary = diagnostics.completedSummary(fileSizeBytes: 2_000, durationMs: 1_000)
     let health = diagnostics.health(state: "capturing", lastHeartbeatAt: 1)
 
-    guard health.droppedFrames == 1, health.pendingVideoSamples == 0 else {
+    guard
+      health.droppedFrames == 1,
+      health.pendingVideoSamples == 0,
+      summary.capturedFrames == 1,
+      summary.encodedFrames == 1,
+      summary.averageFileWriteBytesPerSecond == 2_000,
+      summary.peakFileWriteBytesPerSecond >= summary.averageFileWriteBytesPerSecond
+    else {
       throw SmokeCheckError.failed("Diagnostics invariant failed.")
     }
   }

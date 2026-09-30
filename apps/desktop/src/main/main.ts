@@ -10,6 +10,8 @@ import { loadRuntimeConfig } from './infrastructure/runtime-config';
 import { createLifecycleManager, type LifecycleManager } from './infrastructure/lifecycle-manager';
 import { resolveCaptureServicePath } from './infrastructure/native/native-service-path';
 import { DesktopControls } from './infrastructure/desktop-controls';
+import { ElectronDiagnosticsReport } from './infrastructure/electron-diagnostics-report';
+import { StructuredFileLogger } from './infrastructure/logger';
 import { RegionSelectionManager } from './infrastructure/region-selection-manager';
 import { createWindowEventPublisher } from './ipc/ipc-event-publisher';
 import { registerIpcController } from './ipc/ipc-controller';
@@ -23,6 +25,7 @@ let ipcControllerRegistered = false;
 let shutdownRequested = false;
 let regionSelectionManager: RegionSelectionManager | null = null;
 let desktopControls: DesktopControls | null = null;
+let applicationLogger: StructuredFileLogger | null = null;
 
 function createMainWindow(): void {
   const packagedRendererRootUrl = pathToFileURL(path.join(__dirname, '../renderer/')).href;
@@ -64,9 +67,11 @@ function createMainWindow(): void {
   });
 
   if (applicationContainer === null) {
+    if (applicationLogger === null) throw new Error('Application logging is unavailable.');
+    const logger = applicationLogger;
     const events = createWindowEventPublisher((channel, event) => {
       mainWindow?.webContents.send(channel, event);
-    });
+    }, logger);
     regionSelectionManager = new RegionSelectionManager({
       preloadPath: path.join(__dirname, 'preload.js'),
       devServerUrl: MAIN_WINDOW_VITE_DEV_SERVER_URL,
@@ -74,27 +79,38 @@ function createMainWindow(): void {
     });
     desktopControls = new DesktopControls({
       getMainWindow: () => mainWindow,
-      onWarning: (message) => console.warn(`[screen-recorder] ${message}`),
+      onWarning: (message) => logger.warn(message),
     });
-    applicationContainer = createApplicationContainer(events, {
-      nativeServicePath: resolveCaptureServicePath({
-        isPackaged: app.isPackaged,
-        resourcesPath: process.resourcesPath,
-        workingDirectory: process.cwd(),
-        moduleDirectory: __dirname,
-        architecture: process.arch,
-        platform: process.platform,
-      }),
-      defaultOutputDirectory: () => path.join(app.getPath('videos'), 'Screen Recorder'),
-      libraryDatabasePath: path.join(app.getPath('userData'), 'library', 'recordings.sqlite3'),
-      thumbnailCacheDirectory: path.join(app.getPath('userData'), 'library', 'thumbnails'),
-      preferencesFilePath: path.join(app.getPath('userData'), 'preferences.json'),
-    });
+    const diagnosticsReport = new ElectronDiagnosticsReport({ logger });
+    applicationContainer = createApplicationContainer(
+      events,
+      {
+        nativeServicePath: resolveCaptureServicePath({
+          isPackaged: app.isPackaged,
+          resourcesPath: process.resourcesPath,
+          workingDirectory: process.cwd(),
+          moduleDirectory: __dirname,
+          architecture: process.arch,
+          platform: process.platform,
+        }),
+        defaultOutputDirectory: () => path.join(app.getPath('videos'), 'Screen Recorder'),
+        libraryDatabasePath: path.join(app.getPath('userData'), 'library', 'recordings.sqlite3'),
+        thumbnailCacheDirectory: path.join(app.getPath('userData'), 'library', 'thumbnails'),
+        preferencesFilePath: path.join(app.getPath('userData'), 'preferences.json'),
+        diagnosticsFilePath: path.join(app.getPath('userData'), 'diagnostics', 'recordings.json'),
+        diagnosticsReport,
+      },
+      logger,
+    );
     lifecycleManager = createLifecycleManager(async () => {
+      logger.info('Application shutdown started.');
       desktopControls?.dispose();
       regionSelectionManager?.dispose();
       await applicationContainer?.dispose();
+      logger.info('Application shutdown completed.');
+      await logger.flush();
     });
+    logger.info('Main window and application services were created.');
   }
 
   if (!ipcControllerRegistered && applicationContainer !== null) {
@@ -150,6 +166,17 @@ if (!hasSingleInstanceLock) {
   });
 
   app.whenReady().then(() => {
+    applicationLogger = new StructuredFileLogger({
+      directory: path.join(app.getPath('userData'), 'logs'),
+      minimumLevel: runtimeConfig.logLevel,
+      mirrorToConsole: !app.isPackaged,
+    });
+    applicationLogger.info('Application became ready.', {
+      appVersion: app.getVersion(),
+      electronVersion: process.versions.electron,
+      platform: process.platform,
+      architecture: process.arch,
+    });
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       callback({
         responseHeaders: {
@@ -186,7 +213,7 @@ if (!hasSingleInstanceLock) {
     void lifecycleManager
       .shutdown()
       .catch((error: unknown) => {
-        console.error('[screen-recorder] graceful shutdown failed.', error);
+        applicationLogger?.error('Graceful shutdown failed.', { error });
       })
       .finally(() => app.quit());
   });

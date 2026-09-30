@@ -35,6 +35,9 @@ final class CaptureStreamCoordinator: NSObject, SCStreamDelegate, @unchecked Sen
     }
 
     let writer = try RecordingAssetWriter(configuration: configuration, diagnostics: diagnostics)
+    NativeLog.capture.info(
+      "Starting ScreenCaptureKit stream for source type \(configuration.sourceKind, privacy: .public)"
+    )
 
     let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     let filter = try makeFilter(configuration: configuration, content: content)
@@ -154,6 +157,7 @@ final class CaptureStreamCoordinator: NSObject, SCStreamDelegate, @unchecked Sen
   }
 
   func stop() async throws -> NativeRecordingResult? {
+    NativeLog.capture.info("Stopping ScreenCaptureKit stream")
     if let stream {
       try await stream.stopCapture()
     }
@@ -177,8 +181,14 @@ final class CaptureStreamCoordinator: NSObject, SCStreamDelegate, @unchecked Sen
     writer?.startResult
   }
 
+  func sampleFileWriteMetrics() {
+    writer?.sampleFileWriteMetrics()
+  }
+
   func stream(_ stream: SCStream, didStopWithError error: Error) {
-    NSLog("CaptureService stream stopped: %@", error.localizedDescription)
+    NativeLog.capture.error(
+      "Capture stream stopped unexpectedly: \(error.localizedDescription, privacy: .private(mask: .hash))"
+    )
     writer?.interrupt(message: "The capture stream stopped unexpectedly: \(error.localizedDescription)")
   }
 }
@@ -205,5 +215,6 @@ final class CaptureStreamCoordinator: @unchecked Sendable {
   func pause() {}
   func resume() {}
   func recordingStart() -> NativeRecordingStart? { nil }
+  func sampleFileWriteMetrics() {}
 }
 #endif

@@ -5,6 +5,7 @@ import type {
   ApplicationEventPublisher,
   Clock,
   RecordingCatalogRepository,
+  RecordingDiagnosticsRepository,
   RecordingSessionRepository,
 } from '../ports/repositories';
 
@@ -12,6 +13,7 @@ export class StopRecordingUseCase {
   public constructor(
     private readonly sessions: RecordingSessionRepository,
     private readonly catalog: RecordingCatalogRepository,
+    private readonly diagnostics: RecordingDiagnosticsRepository,
     private readonly engine: RecordingEnginePort,
     private readonly clock: Clock,
     private readonly events: ApplicationEventPublisher,
@@ -30,10 +32,23 @@ export class StopRecordingUseCase {
     await this.sessions.save(session);
 
     try {
-      const artifact = await this.engine.stop(handleId);
+      const result = await this.engine.stop(handleId);
       const completedAt = this.clock.now();
-      await this.catalog.save(createRecordingMetadataFromArtifact(artifact));
-      session.complete(completedAt, artifact);
+      await this.catalog.save(createRecordingMetadataFromArtifact(result.artifact));
+      try {
+        await this.diagnostics.save(result.diagnostics);
+      } catch {
+        // A support-metadata failure must never invalidate a playable recording.
+        this.events.publish({
+          version: 1,
+          type: 'recording.warning',
+          sessionId,
+          code: 'DIAGNOSTICS_PERSISTENCE_FAILED',
+          message: 'Recording diagnostics could not be saved.',
+          occurredAt: completedAt,
+        });
+      }
+      session.complete(completedAt, result.artifact);
       await this.sessions.save(session);
       this.events.publish({
         version: 1,
@@ -46,11 +61,11 @@ export class StopRecordingUseCase {
         version: 1,
         type: 'recording.completed',
         sessionId,
-        artifact,
+        artifact: result.artifact,
         occurredAt: completedAt,
       });
 
-      return artifact;
+      return result.artifact;
     } catch (error) {
       const reason =
         error instanceof Error ? error.message : 'The recording could not be finalized.';

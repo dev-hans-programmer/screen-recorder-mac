@@ -107,6 +107,7 @@ export function createScreenRecorderApi(
     relaunchApplication: async () => {
       await sendCommand('app.relaunch', {});
     },
+    exportDiagnostics: () => sendCommand('diagnostics.export', {}) as Promise<string | null>,
     getPreferences: () => sendCommand('preferences.get', {}) as Promise<AppPreferencesDto>,
     updatePreferences: (patch) =>
       sendCommand('preferences.update', { patch }) as Promise<AppPreferencesDto>,

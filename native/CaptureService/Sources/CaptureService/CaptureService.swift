@@ -1,8 +1,6 @@
 import Foundation
-import OSLog
 
 actor CaptureService {
-  private let logger = Logger(subsystem: "com.screenrecorder.capture-service", category: "service")
   private let permissions = PermissionInspector()
   private let discovery = SourceDiscovery()
   private let diagnostics = CaptureDiagnostics()
@@ -18,6 +16,7 @@ actor CaptureService {
 
   func handle(_ request: NativeRequest) async -> NativeResponse {
     lastHeartbeatAt = Date().timeIntervalSince1970
+    NativeLog.protocolLog.debug("Handling command: \(request.command, privacy: .public)")
 
     do {
       guard request.protocolVersion == nativeProtocolVersion else {
@@ -35,7 +34,7 @@ actor CaptureService {
         error: nil
       )
     } catch {
-      logger.error("Command failed: \(request.command, privacy: .public)")
+      NativeLog.protocolLog.error("Command failed: \(request.command, privacy: .public)")
       return makeErrorResponse(for: error, request: request)
     }
   }
@@ -54,6 +53,7 @@ actor CaptureService {
     shouldExit = true
     _ = try? await streamCoordinator.stop()
     state = "stopped"
+    NativeLog.capture.info("Capture service stopped")
   }
 
   func isExitRequested() -> Bool {
@@ -104,6 +104,9 @@ actor CaptureService {
       configuration = validated
       streamCoordinator.configure(validated)
       state = "prepared"
+      NativeLog.capture.info(
+        "Capture prepared: \(validated.sourceKind, privacy: .public), \(validated.width)x\(validated.height) at \(validated.frameRate) FPS"
+      )
       return try encodePayload(validated)
 
     case "startCapture":
@@ -123,7 +126,9 @@ actor CaptureService {
       }
       state = "capturing"
       do {
-        return try encodePayload(await streamCoordinator.start())
+        let start = try await streamCoordinator.start()
+        NativeLog.capture.info("Capture started")
+        return try encodePayload(start)
       } catch {
         state = "failed"
         throw error
@@ -135,6 +140,7 @@ actor CaptureService {
       }
       streamCoordinator.pause()
       state = "paused"
+      NativeLog.capture.info("Capture paused")
       return try encodePayload(health())
 
     case "resumeCapture":
@@ -143,6 +149,7 @@ actor CaptureService {
       }
       streamCoordinator.resume()
       state = "capturing"
+      NativeLog.capture.info("Capture resumed")
       return try encodePayload(health())
 
     case "stopCapture":
@@ -150,6 +157,7 @@ actor CaptureService {
       do {
         let result = try await streamCoordinator.stop()
         state = "idle"
+        NativeLog.capture.info("Capture stopped")
         if let result {
           return try encodePayload(result)
         }
@@ -172,7 +180,8 @@ actor CaptureService {
   }
 
   private func health() -> NativeHealth {
-    diagnostics.health(state: state, lastHeartbeatAt: lastHeartbeatAt)
+    streamCoordinator.sampleFileWriteMetrics()
+    return diagnostics.health(state: state, lastHeartbeatAt: lastHeartbeatAt)
   }
 }
 

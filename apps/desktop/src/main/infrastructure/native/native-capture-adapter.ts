@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import {
   createDurationMs,
+  createRecordingDiagnostics,
   createRecordingArtifact,
   createRecordingFilePath,
   DomainError,
@@ -14,8 +15,10 @@ import type {
   CapturePermissionRequest,
   CapturePort,
   Clock,
+  Logger,
   RecordingEngineHandle,
   RecordingEnginePort,
+  RecordingEngineStopResult,
   ValidatedRecordingRequest,
 } from '@screen-recorder/application';
 
@@ -89,6 +92,7 @@ export interface NativeRecordingEngineOptions {
   readonly outputDirectory: () => Promise<string>;
   readonly clock: Clock;
   readonly events: ApplicationEventPublisher;
+  readonly logger?: Logger;
   readonly progressIntervalMs?: number;
 }
 
@@ -97,6 +101,7 @@ export class NativeRecordingEngine implements RecordingEnginePort {
   private readonly outputDirectory: () => Promise<string>;
   private readonly clock: Clock;
   private readonly events: ApplicationEventPublisher;
+  private readonly logger: Logger | undefined;
   private readonly progressIntervalMs: number;
   private active: ActiveNativeRecording | undefined;
 
@@ -105,6 +110,7 @@ export class NativeRecordingEngine implements RecordingEnginePort {
     this.outputDirectory = options.outputDirectory;
     this.clock = options.clock;
     this.events = options.events;
+    this.logger = options.logger;
     this.progressIntervalMs = options.progressIntervalMs ?? 500;
   }
 
@@ -159,11 +165,22 @@ export class NativeRecordingEngine implements RecordingEnginePort {
         ...active,
         progressTimer: setInterval(() => void this.publishProgress(), this.progressIntervalMs),
       };
+      this.logger?.info('Native recording started.', {
+        sessionId,
+        profileId: request.effective.profileId,
+        width: request.outputDimensions.width,
+        height: request.outputDimensions.height,
+        frameRate: request.effective.frameRate,
+        systemAudio: request.effective.audio.systemAudio,
+        microphone: request.effective.audio.microphone,
+        encoder: start.hardwareEncoder ? 'hardware' : 'software',
+      });
       // Publish once immediately so the renderer does not wait for the first polling interval
       // before it receives a live duration/byte snapshot.
       void this.publishProgress();
       return { id: sessionId };
     } catch (error) {
+      this.logger?.error('Native recording failed to start.', { sessionId, error });
       this.supervisor.releaseRecording(sessionId);
       throw toNativeDomainError(error);
     }
@@ -175,6 +192,7 @@ export class NativeRecordingEngine implements RecordingEnginePort {
     try {
       await this.request('pauseCapture');
       active.pausedAt = this.clock.now();
+      this.logger?.info('Native recording paused.', { sessionId: active.sessionId });
     } catch (error) {
       throw toNativeDomainError(error);
     }
@@ -189,12 +207,13 @@ export class NativeRecordingEngine implements RecordingEnginePort {
         active.pausedDurationMs += Math.max(0, this.clock.now() - active.pausedAt);
         active.pausedAt = undefined;
       }
+      this.logger?.info('Native recording resumed.', { sessionId: active.sessionId });
     } catch (error) {
       throw toNativeDomainError(error);
     }
   }
 
-  public async stop(handleId: string): Promise<RecordingArtifact> {
+  public async stop(handleId: string): Promise<RecordingEngineStopResult> {
     const active = this.requireActive(handleId);
     clearInterval(active.progressTimer);
 
@@ -202,8 +221,42 @@ export class NativeRecordingEngine implements RecordingEnginePort {
       const result = parseNativeRecordingResult(
         await this.request('stopCapture', null, { timeoutMs: 30_000 }),
       );
-      return createArtifact(result, active);
+      const completed = {
+        artifact: createArtifact(result, active),
+        diagnostics: createRecordingDiagnostics({
+          schemaVersion: 1,
+          sessionId: active.sessionId,
+          recordedAt: this.clock.now(),
+          width: result.width,
+          height: result.height,
+          durationMs: result.durationMs,
+          capturedFrameCount: result.capturedFrames,
+          actualFrameCount: result.encodedFrames,
+          droppedFrameCount: result.droppedFrames,
+          codec: result.codec as 'h264' | 'hevc' | 'prores422',
+          encoder: result.hardwareEncoder ? 'hardware' : 'software',
+          systemAudio: audioTrackState(
+            active.request.effective.audio.systemAudio,
+            result.systemAudioSamples,
+          ),
+          microphone: audioTrackState(
+            active.request.effective.audio.microphone,
+            result.microphoneSamples,
+          ),
+          fileSizeBytes: result.fileSizeBytes,
+          averageFileWriteBytesPerSecond: result.averageFileWriteBytesPerSecond,
+          peakFileWriteBytesPerSecond: result.peakFileWriteBytesPerSecond,
+        }),
+      };
+      this.logger?.info('Recording performance summary.', {
+        ...completed.diagnostics,
+      });
+      return completed;
     } catch (error) {
+      this.logger?.error('Native recording failed to stop.', {
+        sessionId: active.sessionId,
+        error,
+      });
       throw toNativeDomainError(error);
     } finally {
       this.active = undefined;
@@ -283,6 +336,11 @@ export class NativeRecordingEngine implements RecordingEnginePort {
       active.progressRequestInFlight = false;
     }
   }
+}
+
+function audioTrackState(requested: boolean, sampleCount: number) {
+  if (!requested) return 'disabled' as const;
+  return sampleCount > 0 ? ('active' as const) : ('empty' as const);
 }
 
 function createArtifact(

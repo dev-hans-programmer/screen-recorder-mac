@@ -1243,6 +1243,34 @@ export function SettingsView({ store }: { readonly store: RendererStore }) {
           </label>
         </div>
       </section>
+      <section className="settings-section">
+        <div className="settings-section-heading">
+          <div>
+            <h3>Support diagnostics</h3>
+            <p>Export technical details to investigate capture or performance problems.</p>
+          </div>
+        </div>
+        <div className="diagnostics-export-card">
+          <span className="permission-setup-icon">
+            <Icon name="activity" />
+          </span>
+          <div>
+            <strong>Privacy-safe support report</strong>
+            <p>
+              Includes app, macOS, hardware, recent errors, and recording performance summaries.
+              Recording content and media file paths are never included.
+            </p>
+          </div>
+          <Button
+            disabled={operation !== 'idle'}
+            icon="folder"
+            variant="secondary"
+            onClick={() => void store.exportDiagnostics()}
+          >
+            {operation === 'exporting-diagnostics' ? 'Exporting…' : 'Export diagnostics'}
+          </Button>
+        </div>
+      </section>
     </div>
   );
 }
