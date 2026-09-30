@@ -86,8 +86,9 @@ parent-process pipe a second cleanup path in addition to the explicit `shutdown`
 - Pause/resume drops samples while paused and retimes the following samples to remove the pause
   interval from the final timeline.
 - H.264, HEVC, and ProRes 422 use profile-specific container, codec, bitrate, and quality settings.
-- Audio tracks share the ScreenCaptureKit media clock. Missing audio and delayed microphone samples
-  are accepted without blocking video finalization.
+- Audio sources share the ScreenCaptureKit media clock. When both sources are enabled, finalization
+  mixes system audio and microphone into one broadly playable AAC track while passing encoded video
+  through unchanged. Missing audio and delayed microphone samples do not block video finalization.
 - HDR capability is reported conservatively from the display's extended dynamic range support. The
   stream configuration currently defaults to SDR until the Phase 5 encoding profile requests HDR.
 

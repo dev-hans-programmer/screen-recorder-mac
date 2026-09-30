@@ -382,12 +382,14 @@ select:focus-visible {
 }
 
 .content-scroll::-webkit-scrollbar,
-.source-list::-webkit-scrollbar {
+.source-list::-webkit-scrollbar,
+.menu-popover::-webkit-scrollbar {
   width: 8px;
 }
 
 .content-scroll::-webkit-scrollbar-thumb,
-.source-list::-webkit-scrollbar-thumb {
+.source-list::-webkit-scrollbar-thumb,
+.menu-popover::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
   background: color-mix(in srgb, var(--text-faint) 42%, transparent);
@@ -1044,30 +1046,23 @@ select:focus-visible {
   position: relative;
 }
 
-.menu summary {
-  list-style: none;
-}
-
-.menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.menu summary svg {
+.menu-trigger svg {
   transition: transform 160ms ease;
 }
 
-.menu[open] summary svg {
+.menu-trigger[aria-expanded='true'] svg {
   transform: rotate(90deg);
 }
 
 .menu-popover {
-  position: absolute;
-  z-index: 3;
-  top: calc(100% + 7px);
-  right: 0;
+  position: fixed;
+  z-index: 20;
   display: grid;
   min-width: 160px;
+  max-width: calc(100vw - 24px);
   gap: 3px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: 11px;
   padding: 5px;
@@ -1565,7 +1560,7 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-.recording-card-title .menu > summary {
+.recording-card-title .menu-trigger {
   min-height: 29px;
   padding: 5px 8px;
   font-size: 0.64rem;

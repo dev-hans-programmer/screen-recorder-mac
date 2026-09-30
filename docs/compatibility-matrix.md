@@ -20,7 +20,7 @@
 | Region capture               | Pass                  | 1280×720 crop finalized and was playable.                             |
 | System audio only            | Pass                  | One AAC audio track plus video passed both inspectors.                |
 | Microphone only              | Pass                  | One AAC microphone track plus video passed both inspectors.           |
-| System audio plus microphone | Pass                  | Two AAC audio tracks plus video passed both inspectors.               |
+| System audio plus microphone | Pass                  | One mixed AAC playback track plus video passed both inspectors.       |
 | Sleep/wake during capture    | Manual pending        | Start capture, sleep/wake, stop, and inspect finalization/recovery.   |
 | Display disconnect/reconnect | Manual pending        | Requires a second display; verify clear source-failure handling.      |
 

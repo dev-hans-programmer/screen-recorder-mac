@@ -13,8 +13,10 @@ const optionNumber = (name) => {
 const expectedWidth = optionNumber('expect-width');
 const expectedHeight = optionNumber('expect-height');
 const expectedFrameRate = optionNumber('expect-fps');
-const expectedAudioTracks =
-  Number(args.includes('--expect-system-audio')) + Number(args.includes('--expect-microphone'));
+// System and microphone input are mixed into one playback-compatible output track.
+const expectedAudioTracks = Number(
+  args.includes('--expect-system-audio') || args.includes('--expect-microphone'),
+);
 
 if (!recordingPath || !existsSync(recordingPath)) {
   console.error('Usage: pnpm quality:validate <recording-path> [--quicktime]');
@@ -96,7 +98,7 @@ if (
     `Expected nominal frame rate ${expectedFrameRate}, received ${avFoundation.nominalFrameRate}.`,
   );
 }
-if (avFoundation.audioTrackCount < expectedAudioTracks) {
+if (avFoundation.audioTrackCount !== expectedAudioTracks) {
   errors.push(
     `Expected ${expectedAudioTracks} audio track(s), received ${avFoundation.audioTrackCount}.`,
   );

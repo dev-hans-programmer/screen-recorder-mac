@@ -26,6 +26,8 @@ final class RecordingAssetWriter: @unchecked Sendable {
   private let maxPendingSamples = 12
 
   private let partialURL: URL
+  private let mixInputURL: URL
+  private let mixedPartialURL: URL
   private let finalURL: URL
   private let writer: AVAssetWriter
   private let videoInput: AVAssetWriterInput
@@ -186,8 +188,16 @@ final class RecordingAssetWriter: @unchecked Sendable {
       .appendingPathExtension(fileExtension)
     self.partialURL = outputDirectory
       .appendingPathComponent(".\(baseName).\(fileExtension).partial")
+    // AVAssetReader requires a recognizable final extension even after the first writer has
+    // completed. Both mix intermediates remain hidden and are never exposed as library items.
+    self.mixInputURL = outputDirectory
+      .appendingPathComponent(".\(baseName).unmixed.\(fileExtension)")
+    self.mixedPartialURL = outputDirectory
+      .appendingPathComponent(".\(baseName).mixed.\(fileExtension)")
 
     try? FileManager.default.removeItem(at: partialURL)
+    try? FileManager.default.removeItem(at: mixInputURL)
+    try? FileManager.default.removeItem(at: mixedPartialURL)
     try? FileManager.default.removeItem(at: finalURL)
 
     do {
@@ -528,14 +538,65 @@ final class RecordingAssetWriter: @unchecked Sendable {
           return
         }
 
-        do {
-          let result = try self.moveCompletedFileOnQueue()
-          self.completedResult = result
-          continuation.resume(returning: result)
-        } catch {
-          continuation.resume(throwing: error)
+        Task { [weak self] in
+          guard let self else {
+            continuation.resume(throwing: NativeServiceError.captureFailure("The writer was released during finalization."))
+            return
+          }
+          do {
+            try await self.mixAudioTracksIfNeeded()
+            self.queue.async {
+              do {
+                let result = try self.moveCompletedFileOnQueue()
+                self.completedResult = result
+                continuation.resume(returning: result)
+              } catch {
+                continuation.resume(throwing: error)
+              }
+            }
+          } catch {
+            let message = self.describeWriterError(error)
+            self.diagnostics.setWriterError(message, partialOutputPath: self.partialURL.path)
+            try? FileManager.default.removeItem(at: self.mixedPartialURL)
+            continuation.resume(
+              throwing: NativeServiceError.fileFinalizationFailed(message)
+            )
+          }
         }
       }
+    }
+  }
+
+  private func mixAudioTracksIfNeeded() async throws {
+    guard configuration.systemAudio, configuration.microphone else { return }
+    NativeLog.audio.info("Mixing system and microphone audio into one playback track")
+    do {
+      try FileManager.default.moveItem(at: partialURL, to: mixInputURL)
+      let mixed = try await RecordingAudioMixer.mixTracksIfNeeded(
+        inputURL: mixInputURL,
+        outputURL: mixedPartialURL,
+        fileType: configuration.profileId.container.avFileType
+      )
+      guard mixed else {
+        try FileManager.default.moveItem(at: mixInputURL, to: partialURL)
+        return
+      }
+
+      try FileManager.default.moveItem(at: mixedPartialURL, to: partialURL)
+      // Once the mixed recording is safely installed, failure to remove the hidden source copy
+      // must not turn an otherwise valid recording into a finalization failure.
+      try? FileManager.default.removeItem(at: mixInputURL)
+    } catch {
+      // Preserve the original writer output under its diagnostic path if mixing fails.
+      if
+        FileManager.default.fileExists(atPath: mixInputURL.path),
+        !FileManager.default.fileExists(atPath: partialURL.path)
+      {
+        try? FileManager.default.moveItem(at: mixInputURL, to: partialURL)
+      }
+      throw NativeServiceError.fileFinalizationFailed(
+        "Unable to install the mixed recording: \(error.localizedDescription)"
+      )
     }
   }
 

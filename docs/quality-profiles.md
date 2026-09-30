@@ -43,10 +43,11 @@ Quality profiles describe the desired output. The native capture service must st
 ## Audio behavior
 
 - System audio and microphone audio are configured independently.
-- A recording may contain video only, video plus system audio, video plus microphone audio, or all three.
+- A recording contains video and, when requested, one playback-compatible audio track. If both
+  sources are enabled, system audio and microphone are mixed into that track at finalization.
 - Audio timestamps must remain synchronized with video timestamps.
 - If a requested audio source fails during setup, the app must offer a video-only fallback or cancel according to the user’s choice.
-- The recording library must identify which audio tracks are actually present.
+- The recording library must identify which requested audio sources are represented in the output.
 
 ## Disk-space policy
 

@@ -1,6 +1,18 @@
-import { useEffect, type ButtonHTMLAttributes, type ReactNode, type SVGProps } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+  type SVGProps,
+} from 'react';
+import { createPortal } from 'react-dom';
 
 import type { AppScreen, Operation } from './renderer-store';
+import { calculateFloatingMenuPosition, type FloatingMenuPosition } from './floating-menu-position';
 
 type IconName =
   | 'activity'
@@ -317,16 +329,109 @@ export function Menu({
   readonly label: string;
   readonly children: ReactNode;
 }) {
+  const menuId = useId();
+  const triggerId = `${menuId}-trigger`;
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<FloatingMenuPosition | null>(null);
+
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    const popover = popoverRef.current;
+    if (trigger === null || popover === null) return;
+
+    const triggerRect = trigger.getBoundingClientRect();
+    setPosition(
+      calculateFloatingMenuPosition(
+        triggerRect,
+        {
+          width: popover.offsetWidth,
+          // scrollHeight remains the full menu height when max-height has made it scrollable.
+          height: popover.scrollHeight,
+        },
+        { width: window.innerWidth, height: window.innerHeight },
+      ),
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open, updatePosition]);
+
   return (
-    <details className="menu">
-      <summary className="button button-secondary">
+    <div className="menu">
+      <button
+        ref={triggerRef}
+        aria-controls={open ? menuId : undefined}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="button button-secondary menu-trigger"
+        id={triggerId}
+        type="button"
+        onClick={() => {
+          setPosition(null);
+          setOpen((current) => !current);
+        }}
+      >
         <span>{label}</span>
         <Icon name="chevron-right" size={14} />
-      </summary>
-      <div className="menu-popover" role="menu">
-        {children}
-      </div>
-    </details>
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            aria-labelledby={triggerId}
+            className="menu-popover"
+            id={menuId}
+            role="menu"
+            style={{
+              left: position?.left ?? 0,
+              maxHeight: position?.maxHeight,
+              top: position?.top ?? 0,
+              visibility: position === null ? 'hidden' : 'visible',
+            }}
+            onClick={(event) => {
+              const menuItem = (event.target as HTMLElement).closest<HTMLButtonElement>(
+                '[role="menuitem"]',
+              );
+              if (menuItem !== null && !menuItem.disabled) setOpen(false);
+            }}
+          >
+            {children}
+          </div>,
+          document.body,
+        )}
+    </div>
   );
 }
 

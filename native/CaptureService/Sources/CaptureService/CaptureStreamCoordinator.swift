@@ -178,11 +178,14 @@ final class CaptureStreamCoordinator: NSObject, SCStreamDelegate, @unchecked Sen
       try await stream.stopCapture()
     }
 
-    let result = try await writer?.finish()
-    self.stream = nil
-    self.output = nil
-    self.writer = nil
-    return result
+    // Always release the session, including when media finalization fails, so one damaged
+    // recording cannot leave the service permanently reporting "capture already in progress."
+    defer {
+      self.stream = nil
+      self.output = nil
+      self.writer = nil
+    }
+    return try await writer?.finish()
   }
 
   func pause() {
