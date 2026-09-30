@@ -25,6 +25,7 @@ const nativeServiceBinary = path.resolve(
 );
 
 const signingIdentity = optionalEnvironmentValue('SCREEN_RECORDER_MACOS_SIGN_IDENTITY');
+const signingKeychain = optionalEnvironmentValue('SCREEN_RECORDER_MACOS_SIGN_KEYCHAIN');
 const notaryKeychainProfile = optionalEnvironmentValue('SCREEN_RECORDER_NOTARY_KEYCHAIN_PROFILE');
 const notaryKeychain = optionalEnvironmentValue('SCREEN_RECORDER_NOTARY_KEYCHAIN');
 const appleId = optionalEnvironmentValue('APPLE_ID');
@@ -55,6 +56,9 @@ const notarizationCredentials =
 
 if (notarizationCredentials !== undefined && signingIdentity === undefined) {
   throw new Error('Notarization was configured without SCREEN_RECORDER_MACOS_SIGN_IDENTITY.');
+}
+if (signingKeychain !== undefined && signingIdentity === undefined) {
+  throw new Error('A signing keychain was configured without SCREEN_RECORDER_MACOS_SIGN_IDENTITY.');
 }
 
 function removeCodeSignatureDirectories(directory: string): void {
@@ -118,6 +122,7 @@ const config: ForgeConfig = {
       : {
           osxSign: {
             identity: signingIdentity,
+            ...(signingKeychain === undefined ? {} : { keychain: signingKeychain }),
           },
         }),
     ...(notarizationCredentials === undefined ? {} : { osxNotarize: notarizationCredentials }),

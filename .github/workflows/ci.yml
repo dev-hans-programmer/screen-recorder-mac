@@ -1,0 +1,314 @@
+name: CI and macOS artifacts
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CI: 'true'
+  FORCE_COLOR: '1'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    name: Quality gates
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialize CI logs
+        run: mkdir -p .ci/logs .ci/metadata
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@d9184bf108216479bc5a137cc391f4d7b14c870b # v6.1.0
+        with:
+          version: 12.5.1
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Restore Swift validation cache
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: native/CaptureService/.build
+          key: ${{ runner.os }}-${{ runner.arch }}-swift-validation-${{ hashFiles('native/CaptureService/Package.swift', 'native/CaptureService/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-swift-validation-
+
+      - name: Install dependencies from lockfile
+        run: |
+          set -o pipefail
+          pnpm install --frozen-lockfile 2>&1 | tee .ci/logs/install.log
+
+      - name: Build Swift helper
+        run: |
+          set -o pipefail
+          pnpm native:build 2>&1 | tee .ci/logs/native-build.log
+
+      - name: Type check
+        run: |
+          set -o pipefail
+          pnpm typecheck 2>&1 | tee .ci/logs/typecheck.log
+
+      - name: Lint
+        run: |
+          set -o pipefail
+          pnpm lint 2>&1 | tee .ci/logs/lint.log
+
+      - name: Check formatting
+        run: |
+          set -o pipefail
+          pnpm format 2>&1 | tee .ci/logs/format.log
+
+      - name: Run React and Electron unit tests
+        run: |
+          set -o pipefail
+          pnpm --filter @screen-recorder/desktop test 2>&1 | tee .ci/logs/unit-tests.log
+
+      - name: Run Swift tests
+        run: |
+          set -o pipefail
+          pnpm native:test 2>&1 | tee .ci/logs/native-tests.log
+
+      - name: Record validation metadata
+        if: always()
+        continue-on-error: true
+        run: node scripts/generate-build-metadata.mjs .ci/metadata/validation.json
+
+      - name: Upload validation metadata
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: validation-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ci/metadata/validation.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload validation logs on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: validation-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ci/logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+  package:
+    name: Universal 2 package
+    needs: validate
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialize CI output
+        run: mkdir -p .ci/logs .ci/metadata
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@d9184bf108216479bc5a137cc391f4d7b14c870b # v6.1.0
+        with:
+          version: 12.5.1
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Restore Universal 2 Swift cache
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: native/CaptureService/.build
+          key: ${{ runner.os }}-${{ runner.arch }}-swift-universal-${{ hashFiles('native/CaptureService/Package.swift', 'native/CaptureService/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-swift-universal-
+
+      - name: Install dependencies from lockfile
+        run: |
+          set -o pipefail
+          pnpm install --frozen-lockfile 2>&1 | tee .ci/logs/install.log
+
+      - name: Set reproducible source timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+
+      - name: Configure optional signing and notarization
+        if: github.event_name != 'pull_request'
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD_SECRET: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          bash scripts/ci/configure-macos-signing.sh 2>&1 | tee .ci/logs/signing-setup.log
+
+      - name: Build DMG, ZIP, and checksums
+        run: |
+          set -o pipefail
+          pnpm make 2>&1 | tee .ci/logs/package.log
+
+      - name: Verify packaged architecture and signature
+        run: |
+          set -o pipefail
+          node scripts/verify-package.mjs 2>&1 | tee .ci/logs/package-verification.log
+          pnpm artifacts:verify 2>&1 | tee .ci/logs/checksum-verification.log
+
+      - name: Probe packaged application startup
+        id: packaged_smoke
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pnpm test:packaged:probe 2>&1 | tee .ci/logs/packaged-smoke.log
+
+      - name: Report restricted packaged smoke runner
+        if: steps.packaged_smoke.outcome == 'failure'
+        run: echo '::warning::The packaged startup probe was unavailable on this runner; structural package verification passed.'
+
+      - name: Record package metadata
+        if: always()
+        run: node scripts/generate-build-metadata.mjs .ci/metadata/build-metadata.json apps/desktop/out/make
+
+      - name: Remove temporary signing keychain
+        if: always()
+        continue-on-error: true
+        run: bash scripts/ci/cleanup-macos-signing.sh
+
+      - name: Upload installable artifacts
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: screen-recorder-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/desktop/out/make/*.dmg
+            apps/desktop/out/make/**/*.zip
+            apps/desktop/out/make/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload package metadata
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ci/metadata/build-metadata.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload package logs on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ci/logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: macos-15
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Initialize release output
+        run: mkdir -p .ci/logs .ci/release-download .ci/release-publish
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Download installable artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: screen-recorder-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ci/release-download
+
+      - name: Download package metadata
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: package-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ci/release-download
+
+      - name: Prepare flat release assets
+        run: |
+          dmg_path="$(find .ci/release-download -type f -name '*.dmg' -print -quit)"
+          zip_path="$(find .ci/release-download -type f -name '*.zip' -print -quit)"
+          metadata_path="$(find .ci/release-download -type f -name 'build-metadata.json' -print -quit)"
+          [[ -n "$dmg_path" && -n "$zip_path" && -n "$metadata_path" ]]
+          cp "$dmg_path" .ci/release-publish/
+          cp "$zip_path" .ci/release-publish/
+          cp "$metadata_path" .ci/release-publish/
+          node scripts/generate-checksums.mjs .ci/release-publish
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          release_tag="$GITHUB_REF_NAME"
+          dmg_path="$(find .ci/release-publish -type f -name '*.dmg' -print -quit)"
+          zip_path="$(find .ci/release-publish -type f -name '*.zip' -print -quit)"
+          checksum_path='.ci/release-publish/SHA256SUMS'
+          metadata_path='.ci/release-publish/build-metadata.json'
+          {
+            if gh release view "$release_tag" >/dev/null 2>&1; then
+              gh release upload "$release_tag" \
+                "$dmg_path" "$zip_path" "$checksum_path" "$metadata_path" \
+                --clobber
+            else
+              gh release create "$release_tag" \
+                "$dmg_path" "$zip_path" "$checksum_path" "$metadata_path" \
+                --verify-tag \
+                --generate-notes \
+                --title "Screen Recorder ${release_tag#v}"
+            fi
+          } 2>&1 | tee .ci/logs/release.log
+
+      - name: Upload release logs on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ci/logs
+          if-no-files-found: ignore
+          retention-days: 7

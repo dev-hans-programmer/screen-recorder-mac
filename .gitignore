@@ -20,3 +20,6 @@ native/**/.build/
 
 # Hardware-specific validation output is generated locally and attached to CI runs.
 validation-results/
+
+# Ephemeral logs and metadata produced by local CI workflow probes.
+.ci/

@@ -56,9 +56,13 @@ Trusted signing can be enabled later without changing source code:
 | Variable                                                   | Purpose                                                                  |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `SCREEN_RECORDER_MACOS_SIGN_IDENTITY`                      | Developer ID Application identity used by `codesign`                     |
+| `SCREEN_RECORDER_MACOS_SIGN_KEYCHAIN`                      | Optional temporary or non-default signing keychain                       |
 | `SCREEN_RECORDER_NOTARY_KEYCHAIN_PROFILE`                  | Preferred `notarytool` keychain profile                                  |
 | `SCREEN_RECORDER_NOTARY_KEYCHAIN`                          | Optional non-default keychain for that profile                           |
 | `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` | Alternative notarization credential set; all three are required together |
 
 Notarization is enabled only when complete credentials and a signing identity are present. The
 credential-free path remains the default for local builds and CI artifacts.
+
+The CI workflow can import a `.p12` into an ephemeral keychain and populate these runtime variables
+without storing credentials in source control. See [ci-cd.md](ci-cd.md).

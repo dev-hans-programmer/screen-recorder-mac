@@ -40,6 +40,10 @@ Node version in `.node-version` before installing dependencies or packaging. See
 [packaging.md](packaging.md) for signing options and [installation.md](installation.md) for the
 first-run flow.
 
+GitHub Actions runs the same quality and packaging flow for pull requests, `main`, manual runs, and
+version tags. See [ci-cd.md](ci-cd.md) for artifact downloads, release behavior, caching, and the
+optional signing secret contract.
+
 ## Validation commands
 
 ```bash

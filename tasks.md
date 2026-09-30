@@ -580,7 +580,7 @@ A task is complete when:
 
 ## Phase 14 — CI/CD and artifact publishing
 
-- [ ] T140 Create the CI workflow.
+- [x] T140 Create the CI workflow.
   - Run on macOS runners.
   - Install the selected Node.js and pnpm versions.
   - Install dependencies from the lockfile.
@@ -588,33 +588,33 @@ A task is complete when:
   - Run linting, type checking, unit tests, and native tests.
   - Acceptance: pull requests receive a clear pass/fail result.
 
-- [ ] T141 Add packaged-artifact CI jobs.
+- [x] T141 Add packaged-artifact CI jobs.
   - Build the Electron app.
   - Package the native helper.
   - Generate DMG, ZIP, and checksum files.
   - Run packaged-app smoke tests where the runner allows it.
   - Acceptance: every selected branch can produce downloadable artifacts.
 
-- [ ] T142 Publish CI artifacts.
+- [x] T142 Publish CI artifacts.
   - Upload `.dmg`.
   - Upload `.zip`.
   - Upload checksums.
   - Upload logs on failure.
   - Acceptance: artifacts are available from the CI run and can be downloaded locally.
 
-- [ ] T143 Add release publishing.
+- [x] T143 Add release publishing.
   - Publish artifacts for version tags.
   - Generate release notes from commits or task metadata.
   - Preserve previous artifacts.
   - Acceptance: a version tag creates a downloadable release.
 
-- [ ] T144 Add optional signing/notarization hooks.
+- [x] T144 Add optional signing/notarization hooks.
   - Keep credentials in CI secrets only.
   - Do not put credentials in the repository.
   - Skip these steps cleanly when secrets are absent.
   - Acceptance: unsigned artifact publishing remains functional.
 
-- [ ] T145 Add CI caching and reproducibility.
+- [x] T145 Add CI caching and reproducibility.
   - Cache package-manager dependencies safely.
   - Cache Swift build artifacts where useful.
   - Pin tool versions.
