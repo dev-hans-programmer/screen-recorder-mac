@@ -206,6 +206,7 @@ describe('native bridge infrastructure', () => {
       clock,
       events: publisher,
       progressIntervalMs: 5,
+      availableDiskBytes: async () => Number.MAX_SAFE_INTEGER,
     });
 
     const handle = await engine.start(validated, 'session-1');
@@ -233,5 +234,52 @@ describe('native bridge infrastructure', () => {
       'stopCapture',
     ]);
     await engine.dispose();
+  });
+
+  it('rejects a recording before native configuration when disk space is unsafe', async () => {
+    const supervisor = new NativeServiceSupervisor({
+      executablePath: '/fake/CaptureService',
+      clientVersion: 'test',
+    });
+    const request = createRecordingRequest({
+      source: createCaptureSource({
+        id: 'display:1',
+        kind: 'display',
+        name: 'Main Display',
+        dimensions: { width: 1920, height: 1080 },
+      }),
+      region: undefined,
+      profileId: 'compatible',
+      resolution: '1080p',
+      frameRate: 60,
+      audio: { systemAudio: false, microphone: false },
+      showsCursor: true,
+      showsMouseClicks: false,
+    });
+    const events: ApplicationEvent[] = [];
+    const requestSpy = vi.spyOn(supervisor, 'request');
+    const engine = new NativeRecordingEngine({
+      supervisor,
+      outputDirectory: async () => '/tmp/recordings',
+      clock: { now: () => 1_000 },
+      events: { publish: (event) => events.push(event) },
+      availableDiskBytes: async () => 1,
+    });
+
+    await expect(
+      engine.start(
+        {
+          requested: request,
+          effective: request,
+          outputDimensions: { width: 1920, height: 1080 },
+          warnings: [],
+        },
+        'session-low-disk',
+      ),
+    ).rejects.toMatchObject({ code: 'INSUFFICIENT_DISK_SPACE' });
+    expect(requestSpy).not.toHaveBeenCalled();
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'recording.disk-space-warning' }),
+    );
   });
 });

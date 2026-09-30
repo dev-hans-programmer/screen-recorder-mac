@@ -26,7 +26,8 @@ final class CaptureStreamOutput: NSObject, SCStreamOutput {
     switch type {
     case .screen:
       guard isRecordableVideoFrame(sampleBuffer) else {
-        diagnostics.recordWriterDrop(sampleKind: .video)
+        // ScreenCaptureKit emits idle/blank/suspended status samples when no new image exists.
+        // They are not lost frames and must not inflate the encoder's dropped-frame metric.
         return
       }
       sampleKind = .video

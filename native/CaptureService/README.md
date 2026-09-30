@@ -14,7 +14,8 @@ pnpm native:test
 ```
 
 The package targets macOS 15 or newer. The core target is reusable and the executable target is kept
-thin so protocol and invariant checks can run from the Command Line Tools SDK without XCTest.
+thin. Framework-free core and smoke test executables let protocol, configuration, state, writer, and
+invariant checks run from the Command Line Tools SDK even when XCTest is unavailable.
 
 ## Protocol
 

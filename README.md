@@ -29,6 +29,9 @@ pnpm package
 pnpm make
 pnpm native:build
 pnpm native:test
+pnpm test:compatibility
+pnpm test:performance
+pnpm quality:validate "/path/to/recording.mp4"
 ```
 
 The Electron application includes the native CaptureService protocol, AVAssetWriter recording, the

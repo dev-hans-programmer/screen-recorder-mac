@@ -39,6 +39,46 @@
             "target": "CaptureServiceSmokeTests",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release CaptureServiceSmokeTests (native/CaptureService)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:screen-recorder}/native/CaptureService",
+            "name": "Debug MediaInspector (native/CaptureService)",
+            "target": "MediaInspector",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug MediaInspector (native/CaptureService)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:screen-recorder}/native/CaptureService",
+            "name": "Release MediaInspector (native/CaptureService)",
+            "target": "MediaInspector",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release MediaInspector (native/CaptureService)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:screen-recorder}/native/CaptureService",
+            "name": "Debug CaptureServiceCoreTests (native/CaptureService)",
+            "target": "CaptureServiceCoreTests",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug CaptureServiceCoreTests (native/CaptureService)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:screen-recorder}/native/CaptureService",
+            "name": "Release CaptureServiceCoreTests (native/CaptureService)",
+            "target": "CaptureServiceCoreTests",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release CaptureServiceCoreTests (native/CaptureService)"
         }
     ]
 }

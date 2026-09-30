@@ -25,8 +25,9 @@ struct SourceDiscovery: Sendable {
   func capabilities() async throws -> NativeCapabilities {
 #if canImport(ScreenCaptureKit)
     let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-    let width = min(content.displays.map(\.width).max() ?? 3840, 3840)
-    let height = min(content.displays.map(\.height).max() ?? 2160, 2160)
+    let displayGeometries = content.displays.map(displayGeometry)
+    let width = min(displayGeometries.map(\.pixelWidth).max() ?? 3840, 3840)
+    let height = min(displayGeometries.map(\.pixelHeight).max() ?? 2160, 2160)
 
     return NativeCapabilities(
       maxOutputWidth: width,
@@ -55,15 +56,16 @@ struct SourceDiscovery: Sendable {
 #if canImport(ScreenCaptureKit)
   private func contentSources(_ content: SCShareableContent) -> [NativeSource] {
     let referenceDisplay = content.displays.first
+    let referenceGeometry = referenceDisplay.map(displayGeometry)
     let displays = content.displays.map { display in
-      let scaleFactor = displayScaleFactor(display.displayID, pixelWidth: display.width)
+      let geometry = displayGeometry(display)
       return NativeSource(
         id: "display:\(display.displayID)",
         kind: "display",
         name: "Display \(display.displayID)",
-        width: display.width,
-        height: display.height,
-        scaleFactor: scaleFactor,
+        width: geometry.pixelWidth,
+        height: geometry.pixelHeight,
+        scaleFactor: geometry.scaleFactor,
         isAvailable: true
       )
     }
@@ -73,9 +75,9 @@ struct SourceDiscovery: Sendable {
         id: "window:\(window.windowID)",
         kind: "window",
         name: window.title?.isEmpty == false ? window.title ?? "Window" : "Window \(window.windowID)",
-        width: max(Int(window.frame.width), 2),
-        height: max(Int(window.frame.height), 2),
-        scaleFactor: nil,
+        width: max(Int((window.frame.width * (referenceGeometry?.scaleFactor ?? 1)).rounded()), 2),
+        height: max(Int((window.frame.height * (referenceGeometry?.scaleFactor ?? 1)).rounded()), 2),
+        scaleFactor: referenceGeometry?.scaleFactor,
         isAvailable: window.isOnScreen
       )
     }
@@ -89,11 +91,9 @@ struct SourceDiscovery: Sendable {
         name: application.applicationName.isEmpty ? applicationIdentifier : application.applicationName,
         // Application filters are rendered from a display. Use that display's pixel envelope
         // so the application layer can validate a request before the native stream starts.
-        width: referenceDisplay?.width,
-        height: referenceDisplay?.height,
-        scaleFactor: referenceDisplay.map {
-          displayScaleFactor($0.displayID, pixelWidth: $0.width)
-        } ?? nil,
+        width: referenceGeometry?.pixelWidth,
+        height: referenceGeometry?.pixelHeight,
+        scaleFactor: referenceGeometry?.scaleFactor,
         isAvailable: true
       )
     }
@@ -101,16 +101,21 @@ struct SourceDiscovery: Sendable {
     return displays + windows + applications
   }
 
-  private func displayScaleFactor(_ displayId: CGDirectDisplayID, pixelWidth: Int) -> Double? {
+  private func displayGeometry(
+    _ display: SCDisplay
+  ) -> (pixelWidth: Int, pixelHeight: Int, scaleFactor: Double) {
 #if canImport(CoreGraphics)
-    let bounds = CGDisplayBounds(displayId)
-    guard bounds.width > 0 else { return nil }
-    return Double(pixelWidth) / bounds.width
+    if let mode = CGDisplayCopyDisplayMode(display.displayID), display.width > 0 {
+      return (
+        pixelWidth: mode.pixelWidth,
+        pixelHeight: mode.pixelHeight,
+        scaleFactor: Double(mode.pixelWidth) / Double(display.width)
+      )
+    }
 #else
-    _ = displayId
-    _ = pixelWidth
-    return nil
+    _ = display
 #endif
+    return (pixelWidth: display.width, pixelHeight: display.height, scaleFactor: 1)
   }
 
   private func supportsExtendedDynamicRange(_ display: SCDisplay) -> Bool {

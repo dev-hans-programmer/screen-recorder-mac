@@ -12,12 +12,22 @@ import { resolveCaptureServicePath } from './infrastructure/native/native-servic
 import { DesktopControls } from './infrastructure/desktop-controls';
 import { ElectronDiagnosticsReport } from './infrastructure/electron-diagnostics-report';
 import { StructuredFileLogger } from './infrastructure/logger';
+import {
+  runPackagedSmokeProbe,
+  writePackagedSmokeReport,
+} from './infrastructure/packaged-smoke-probe';
 import { RegionSelectionManager } from './infrastructure/region-selection-manager';
 import { createWindowEventPublisher } from './ipc/ipc-event-publisher';
 import { registerIpcController } from './ipc/ipc-controller';
 import { buildContentSecurityPolicy, isAllowedRendererUrl } from './security/security-policy';
 
 const runtimeConfig = loadRuntimeConfig(process.env);
+const packagedSmokeReportPath = process.env['SCREEN_RECORDER_PACKAGED_SMOKE_REPORT'];
+const packagedSmokeUserData = process.env['SCREEN_RECORDER_PACKAGED_SMOKE_USER_DATA'];
+if (packagedSmokeReportPath !== undefined && packagedSmokeUserData !== undefined) {
+  // Isolate smoke-test state from a developer's real library and preferences.
+  app.setPath('userData', packagedSmokeUserData);
+}
 let mainWindow: BrowserWindow | null = null;
 let applicationContainer: ApplicationContainer | null = null;
 let lifecycleManager: LifecycleManager | null = null;
@@ -93,7 +103,10 @@ function createMainWindow(): void {
           architecture: process.arch,
           platform: process.platform,
         }),
-        defaultOutputDirectory: () => path.join(app.getPath('videos'), 'Screen Recorder'),
+        defaultOutputDirectory: () =>
+          packagedSmokeUserData === undefined
+            ? path.join(app.getPath('videos'), 'Screen Recorder')
+            : path.join(packagedSmokeUserData, 'recordings'),
         libraryDatabasePath: path.join(app.getPath('userData'), 'library', 'recordings.sqlite3'),
         thumbnailCacheDirectory: path.join(app.getPath('userData'), 'library', 'thumbnails'),
         preferencesFilePath: path.join(app.getPath('userData'), 'preferences.json'),
@@ -137,6 +150,27 @@ function createMainWindow(): void {
     void mainWindow.loadFile(
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
     );
+  }
+
+  if (packagedSmokeReportPath !== undefined) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      const window = mainWindow;
+      const container = applicationContainer;
+      if (window === null || container === null) return;
+      void runPackagedSmokeProbe({
+        record: process.env['SCREEN_RECORDER_PACKAGED_SMOKE_RECORD'] !== '0',
+        window,
+        container,
+      }).then(async (report) => {
+        await writePackagedSmokeReport(packagedSmokeReportPath, report);
+        await container.dispose();
+        app.exit(
+          report.error === undefined && (!report.recordingRequested || report.recordingCompleted)
+            ? 0
+            : 1,
+        );
+      });
+    });
   }
 
   if (runtimeConfig.openDevTools) {

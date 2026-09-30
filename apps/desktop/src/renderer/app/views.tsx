@@ -640,6 +640,8 @@ export function LibraryView({ store }: { readonly store: RendererStore }) {
   const [renameTarget, setRenameTarget] = useState<RecordingMetadataDto | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<RecordingMetadataDto | null>(null);
+  const [renderedCount, setRenderedCount] = useState(80);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const visibleRecordings = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -659,6 +661,24 @@ export function LibraryView({ store }: { readonly store: RendererStore }) {
       return right.createdAt - left.createdAt;
     });
   }, [query, recordings, sort]);
+
+  useEffect(() => setRenderedCount(80), [query, recordings, sort]);
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (target === null || renderedCount >= visibleRecordings.length) return;
+
+    // Bound mounted cards so thumbnail decoding and layout stay smooth for very large libraries.
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting === true) {
+          setRenderedCount((count) => Math.min(count + 80, visibleRecordings.length));
+        }
+      },
+      { rootMargin: '600px' },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [renderedCount, visibleRecordings.length]);
 
   if (!initialized) return <LoadingState label="Loading library" />;
   if (recordings.length === 0) {
@@ -757,7 +777,7 @@ export function LibraryView({ store }: { readonly store: RendererStore }) {
           className={`library-grid ${layout === 'list' ? 'is-list' : ''}`}
           aria-label="Recordings"
         >
-          {visibleRecordings.map((recording) => (
+          {visibleRecordings.slice(0, renderedCount).map((recording) => (
             <RecordingCard
               key={recording.id}
               layout={layout}
@@ -770,6 +790,14 @@ export function LibraryView({ store }: { readonly store: RendererStore }) {
               }}
             />
           ))}
+          {renderedCount < visibleRecordings.length && (
+            <div
+              ref={loadMoreRef}
+              aria-label={`Loading more recordings; ${renderedCount} of ${visibleRecordings.length} shown`}
+              className="library-load-more"
+              role="status"
+            />
+          )}
         </section>
       )}
 

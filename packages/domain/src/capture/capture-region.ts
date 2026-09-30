@@ -1,5 +1,7 @@
 import { DomainError } from '../errors/domain-error';
 
+import type { PixelDimensions } from './capture-source';
+
 export interface CaptureRegion {
   readonly x: number;
   readonly y: number;
@@ -42,4 +44,32 @@ export function scaleCaptureRegion(region: CaptureRegion, scaleFactor: number): 
     Math.max(2, Math.round(region.width * scaleFactor)),
     Math.max(2, Math.round(region.height * scaleFactor)),
   );
+}
+
+/**
+ * Region coordinates are local to the selected source. Global display coordinates may be
+ * negative, but a crop sent to ScreenCaptureKit must remain inside its source raster.
+ */
+export function captureRegionFitsWithin(
+  region: CaptureRegion,
+  dimensions: PixelDimensions,
+): boolean {
+  return (
+    region.x >= 0 &&
+    region.y >= 0 &&
+    region.x + region.width <= dimensions.width &&
+    region.y + region.height <= dimensions.height
+  );
+}
+
+export function assertCaptureRegionFitsWithin(
+  region: CaptureRegion,
+  dimensions: PixelDimensions,
+): void {
+  if (!captureRegionFitsWithin(region, dimensions)) {
+    throw new DomainError('INVALID_REGION', 'The capture region extends beyond its source.', {
+      region,
+      dimensions,
+    });
+  }
 }

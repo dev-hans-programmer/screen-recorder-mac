@@ -1,5 +1,6 @@
 import {
   createRecordingRequest,
+  assertCaptureRegionFitsWithin,
   type FrameRate,
   type PixelDimensions,
   type RecordingProfileId,
@@ -106,6 +107,10 @@ export function validateRecordingRequest(
   capabilities: CaptureCapabilities,
 ): ValidatedRecordingRequest {
   const requested = createRecordingRequest(request);
+
+  if (requested.region !== undefined && requested.source.dimensions !== undefined) {
+    assertCaptureRegionFitsWithin(requested.region, requested.source.dimensions);
+  }
   const warnings: RecordingValidationWarning[] = [];
   const requestedProfile = getRecordingProfile(requested.profileId);
   const profileId = resolveProfileId(requested.profileId, capabilities.supportedProfileIds);

@@ -34,6 +34,8 @@ pnpm typecheck
 pnpm lint
 pnpm test
 pnpm format
+pnpm test:hardware:probe
+pnpm quality:validate "/path/to/recording.mp4"
 ```
 
 ## Optional development environment variables
@@ -70,6 +72,8 @@ can export a privacy-safe JSON support report from Settings. See
 [diagnostics.md](diagnostics.md) for fields, retention, privacy rules, and Console inspection.
 
 See [security.md](security.md) for the Electron boundary and IPC rules.
+See [testing-and-quality.md](testing-and-quality.md) for packaged, compatibility, performance, and
+media-file validation, and [compatibility-matrix.md](compatibility-matrix.md) for recorded results.
 
 ## Native CaptureService commands
 

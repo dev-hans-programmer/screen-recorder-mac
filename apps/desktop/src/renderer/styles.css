@@ -1453,6 +1453,11 @@ select:focus-visible {
   grid-template-columns: 1fr;
 }
 
+.library-load-more {
+  min-height: 1px;
+  grid-column: 1 / -1;
+}
+
 .recording-card {
   overflow: hidden;
   border: 1px solid var(--border);

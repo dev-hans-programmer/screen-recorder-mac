@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PauseRecordingUseCase,
+  RecoverInterruptedRecordingUseCase,
   ResumeRecordingUseCase,
   StartRecordingUseCase,
   StopRecordingUseCase,
@@ -140,8 +141,11 @@ class FakeEngine implements RecordingEnginePort {
   public readonly paused: string[] = [];
   public readonly resumed: string[] = [];
   public readonly stopped: string[] = [];
+  public startError: Error | undefined;
+  public stopError: Error | undefined;
 
   public async start(_request: never, sessionId: string): Promise<{ id: string }> {
+    if (this.startError !== undefined) throw this.startError;
     this.started.push(sessionId);
     return { id: 'engine-1' };
   }
@@ -157,6 +161,7 @@ class FakeEngine implements RecordingEnginePort {
   }
 
   public stop(handleId: string): ReturnType<RecordingEnginePort['stop']> {
+    if (this.stopError !== undefined) return Promise.reject(this.stopError);
     this.stopped.push(handleId);
     return Promise.resolve({
       artifact: createRecordingArtifact({
@@ -198,12 +203,14 @@ class FakeEngine implements RecordingEnginePort {
 
 class FakeDiagnostics implements RecordingDiagnosticsRepository {
   public readonly values: RecordingDiagnostics[] = [];
+  public saveError: Error | undefined;
 
   public listRecent(limit: number): Promise<readonly RecordingDiagnostics[]> {
     return Promise.resolve(this.values.slice(0, limit));
   }
 
   public save(diagnostics: RecordingDiagnostics): Promise<void> {
+    if (this.saveError !== undefined) return Promise.reject(this.saveError);
     this.values.push(diagnostics);
     return Promise.resolve();
   }
@@ -345,6 +352,123 @@ describe('recording application use cases', () => {
       code: 'SCREEN_RECORDING_PERMISSION_REQUIRED',
       message: expect.stringContaining('Restart'),
     });
+  });
+
+  it('fails early when microphone capture was requested without permission', async () => {
+    const capture = new FakeCapturePort();
+    capture.permissions = {
+      screenRecording: 'granted',
+      microphone: 'denied',
+      screenRecordingRequiresRestart: false,
+    };
+
+    await expect(
+      new StartRecordingUseCase(
+        makeStartDependencies(
+          capture,
+          new FakeSessionRepository(),
+          new FakeEngine(),
+          new FakeEvents(),
+        ),
+      ).execute(makeRequest({ audio: { systemAudio: false, microphone: true } })),
+    ).rejects.toMatchObject({ code: 'UNSUPPORTED_AUDIO' });
+  });
+
+  it.each([
+    ['native-service failure', new DomainError('NATIVE_SERVICE_FAILURE', 'Helper exited.')],
+    [
+      'disk-space failure',
+      new DomainError('INSUFFICIENT_DISK_SPACE', 'Not enough disk space.', {
+        availableBytes: 1,
+        requiredBytes: 2,
+      }),
+    ],
+    ['user cancellation', new DOMException('The operation was cancelled.', 'AbortError')],
+  ])('marks a prepared session failed after %s', async (_label, failure) => {
+    const sessions = new FakeSessionRepository();
+    const engine = new FakeEngine();
+    const events = new FakeEvents();
+    engine.startError = failure;
+
+    await expect(
+      new StartRecordingUseCase(
+        makeStartDependencies(new FakeCapturePort(), sessions, engine, events),
+      ).execute(makeRequest()),
+    ).rejects.toBe(failure);
+
+    expect(sessions.sessions.get('session-1')?.state).toBe('failed');
+    expect(events.values).toContainEqual(
+      expect.objectContaining({ type: 'recording.failed', sessionId: 'session-1' }),
+    );
+  });
+
+  it('recovers an interrupted active session and is idempotent once recovered', async () => {
+    const sessions = new FakeSessionRepository();
+    const events = new FakeEvents();
+    const interrupted = RecordingSession.create('interrupted', 100);
+    interrupted.prepare(110);
+    interrupted.start(120, 'engine-interrupted');
+    await sessions.save(interrupted);
+    const recovery = new RecoverInterruptedRecordingUseCase(sessions, new FakeClock(), events);
+
+    await expect(recovery.execute()).resolves.toMatchObject({ state: 'failed' });
+    await expect(recovery.execute()).resolves.toBeUndefined();
+    expect(events.values).toContainEqual(
+      expect.objectContaining({ type: 'recording.failed', sessionId: 'interrupted' }),
+    );
+  });
+
+  it('keeps a finalized recording when diagnostics persistence fails', async () => {
+    const capture = new FakeCapturePort();
+    const sessions = new FakeSessionRepository();
+    const engine = new FakeEngine();
+    const events = new FakeEvents();
+    const dependencies = makeStartDependencies(capture, sessions, engine, events);
+    const started = await new StartRecordingUseCase(dependencies).execute(makeRequest());
+    const diagnostics = new FakeDiagnostics();
+    diagnostics.saveError = new Error('metadata disk failure');
+
+    await expect(
+      new StopRecordingUseCase(
+        sessions,
+        new FakeCatalog(),
+        diagnostics,
+        engine,
+        dependencies.clock,
+        events,
+      ).execute(started.session.id),
+    ).resolves.toMatchObject({ id: 'artifact-1' });
+    expect(sessions.sessions.get(started.session.id)?.state).toBe('completed');
+    expect(events.values).toContainEqual(
+      expect.objectContaining({
+        type: 'recording.warning',
+        code: 'DIAGNOSTICS_PERSISTENCE_FAILED',
+      }),
+    );
+  });
+
+  it('fails a stopping session when native finalization fails', async () => {
+    const sessions = new FakeSessionRepository();
+    const engine = new FakeEngine();
+    const events = new FakeEvents();
+    const dependencies = makeStartDependencies(new FakeCapturePort(), sessions, engine, events);
+    const started = await new StartRecordingUseCase(dependencies).execute(makeRequest());
+    engine.stopError = new DomainError(
+      'RECORDING_FINALIZATION_FAILURE',
+      'Writer could not finalize.',
+    );
+
+    await expect(
+      new StopRecordingUseCase(
+        sessions,
+        new FakeCatalog(),
+        new FakeDiagnostics(),
+        engine,
+        dependencies.clock,
+        events,
+      ).execute(started.session.id),
+    ).rejects.toMatchObject({ code: 'RECORDING_FINALIZATION_FAILURE' });
+    expect(sessions.sessions.get(started.session.id)?.state).toBe('failed');
   });
 });
 

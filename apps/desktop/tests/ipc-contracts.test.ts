@@ -50,6 +50,46 @@ describe('IPC contracts', () => {
     ).toThrowError(IpcProtocolError);
   });
 
+  it.each([
+    [
+      'request',
+      () =>
+        parseIpcRequest({
+          protocolVersion: 999,
+          requestId: 'future',
+          command: 'capture.list-sources',
+          payload: {},
+        }),
+    ],
+    [
+      'response',
+      () =>
+        parseIpcResponse('recording.pause', {
+          protocolVersion: 999,
+          requestId: 'future',
+          command: 'recording.pause',
+          ok: true,
+          data: null,
+        }),
+    ],
+    [
+      'event',
+      () =>
+        parseIpcEvent({
+          protocolVersion: 999,
+          eventId: 'future',
+          version: 1,
+          type: 'recording.progress',
+          sessionId: 'session-1',
+          durationMs: 1,
+          encodedBytes: 1,
+          occurredAt: 1,
+        }),
+    ],
+  ])('rejects an unknown protocol version in a %s', (_kind, parse) => {
+    expect(parse).toThrowError(IpcProtocolError);
+  });
+
   it('validates response data against the command-specific schema', () => {
     expect(() =>
       parseIpcResponse('recording.pause', {

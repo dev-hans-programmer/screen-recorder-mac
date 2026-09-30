@@ -176,6 +176,29 @@ describe('RendererStore', () => {
     expect(store.getState().permissions?.screenRecording).toBe('granted');
   });
 
+  it('loads a large recording catalog without blocking state initialization', async () => {
+    const fixture = createApi();
+    const recordings = Array.from({ length: 5_000 }, (_, index): RecordingMetadataDto => ({
+      ...artifact,
+      schemaVersion: 1,
+      id: `recording-${index}`,
+      title: `Recording ${index}`,
+      filePath: `/tmp/Screen Recorder/recording-${index}.mp4`,
+      createdAt: index,
+      availability: 'available',
+      failure: null,
+      recovery: null,
+    }));
+    vi.mocked(fixture.api.listRecordings).mockResolvedValue(recordings);
+    const store = new RendererStore(fixture.api);
+    const startedAt = performance.now();
+
+    await store.initialize();
+
+    expect(store.getState().recordings).toHaveLength(5_000);
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
+  });
+
   it('updates only recording metadata when progress events arrive', async () => {
     const fixture = createApi();
     const store = new RendererStore(fixture.api);

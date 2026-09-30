@@ -3,12 +3,17 @@ import { describe, expect, it } from 'vitest';
 import {
   DomainError,
   RecordingSession,
+  assertCaptureRegionFitsWithin,
+  captureRegionFitsWithin,
   createCaptureRegion,
   createCaptureSource,
   createCaptureSourceSelection,
   createDurationMs,
   createRecordingArtifact,
   createRecordingFilePath,
+  createPixelDimensions,
+  createFrameRate,
+  getRecordingProfile,
   defaultAppPreferences,
   scaleCaptureRegion,
   updateAppPreferences,
@@ -39,6 +44,32 @@ describe('capture domain models', () => {
     expect(() => createCaptureRegion(0, 0, 1, 100)).toThrowError(DomainError);
     expect(() => createCaptureSourceSelection('')).toThrowError(DomainError);
     expect(() => createDurationMs(-1)).toThrowError(DomainError);
+  });
+
+  it('validates pixel dimensions, frame rates, and recording profiles', () => {
+    expect(createPixelDimensions(3840, 2160)).toEqual({ width: 3840, height: 2160 });
+    expect(createFrameRate(60)).toBe(60);
+    expect(getRecordingProfile('master')).toMatchObject({ codec: 'prores422', container: 'mov' });
+    expect(() => createPixelDimensions(1920.5, 1080)).toThrowError(DomainError);
+    expect(() => createFrameRate(120)).toThrowError(DomainError);
+    expect(() => getRecordingProfile('unknown' as 'compatible')).toThrowError(DomainError);
+  });
+
+  it('checks local region bounds before coordinate conversion reaches native capture', () => {
+    const sourceBounds = createPixelDimensions(2560, 1440);
+    const edgeAligned = createCaptureRegion(1920, 1080, 640, 360);
+    const overflow = createCaptureRegion(1921, 1080, 640, 360);
+
+    expect(captureRegionFitsWithin(edgeAligned, sourceBounds)).toBe(true);
+    expect(captureRegionFitsWithin(overflow, sourceBounds)).toBe(false);
+    expect(captureRegionFitsWithin(createCaptureRegion(-1, 0, 100, 100), sourceBounds)).toBe(false);
+    expect(() => assertCaptureRegionFitsWithin(overflow, sourceBounds)).toThrowError(DomainError);
+    expect(scaleCaptureRegion(createCaptureRegion(5, 7, 101, 51), 2)).toEqual({
+      x: 10,
+      y: 14,
+      width: 202,
+      height: 102,
+    });
   });
 });
 
@@ -94,6 +125,29 @@ describe('recording session aggregate', () => {
       expect(error).toBeInstanceOf(DomainError);
       expect((error as DomainError).code).toBe('INVALID_RECORDING_STATE');
     }
+  });
+
+  it('supports failure from an in-progress state and prevents terminal mutations', () => {
+    const session = RecordingSession.create('session-failure', 100);
+    session.prepare(110);
+    session.start(120, 'engine-failure');
+    session.fail(130, 'Native helper exited.');
+
+    expect(session.toSnapshot()).toMatchObject({
+      state: 'failed',
+      failureReason: 'Native helper exited.',
+    });
+    expect(() => session.pause(140)).toThrowError(DomainError);
+    expect(() => session.fail(140, 'again')).toThrowError(DomainError);
+    expect(() =>
+      session.updateStatistics({
+        durationMs: createDurationMs(1),
+        capturedFrames: 1,
+        encodedFrames: 1,
+        droppedFrames: 0,
+        encodedBytes: 1,
+      }),
+    ).toThrowError(DomainError);
   });
 });
 

@@ -45,13 +45,14 @@ final class CaptureStreamCoordinator: NSObject, SCStreamDelegate, @unchecked Sen
     streamConfiguration.width = configuration.width
     streamConfiguration.height = configuration.height
     if let region = configuration.region {
-      // Region coordinates are already normalized by the application layer. The native source
-      // rectangle is applied before scaling so the encoder receives the requested output size.
+      // Electron returns physical-pixel geometry while ScreenCaptureKit's source rectangle uses
+      // display points. Convert here so a Retina crop selects the same visual area the user drew.
+      let scaleFactor = captureScaleFactor(configuration: configuration, content: content)
       streamConfiguration.sourceRect = CGRect(
-        x: region.x,
-        y: region.y,
-        width: region.width,
-        height: region.height
+        x: region.x / scaleFactor,
+        y: region.y / scaleFactor,
+        width: region.width / scaleFactor,
+        height: region.height / scaleFactor
       )
     }
     streamConfiguration.minimumFrameInterval = CMTime(
@@ -140,6 +141,21 @@ final class CaptureStreamCoordinator: NSObject, SCStreamDelegate, @unchecked Sen
 
   private func displayId(from sourceId: String) -> CGDirectDisplayID? {
     parseIdentifier(sourceId, prefix: "display:").map { value in CGDirectDisplayID(value) }
+  }
+
+  private func captureScaleFactor(
+    configuration: CaptureConfiguration,
+    content: SCShareableContent
+  ) -> Double {
+    guard
+      let displayId = displayId(from: configuration.sourceId),
+      let display = content.displays.first(where: { $0.displayID == displayId }),
+      let mode = CGDisplayCopyDisplayMode(display.displayID),
+      display.width > 0
+    else {
+      return 1
+    }
+    return max(1, Double(mode.pixelWidth) / Double(display.width))
   }
 
   private func windowId(from sourceId: String) -> CGWindowID? {

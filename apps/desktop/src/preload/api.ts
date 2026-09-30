@@ -112,13 +112,21 @@ export function createScreenRecorderApi(
     updatePreferences: (patch) =>
       sendCommand('preferences.update', { patch }) as Promise<AppPreferencesDto>,
     onEvent: (listener) => {
+      let active = true;
       const wrappedListener = (_event: unknown, payload: unknown): void => {
-        listener(parseIpcEvent(payload));
+        if (!active) return;
+        try {
+          listener(parseIpcEvent(payload));
+        } catch {
+          // Main-process events are still treated as untrusted input at the preload boundary.
+          // A future or malformed event must not crash the renderer.
+        }
       };
 
       transport.on(ipcChannels.event, wrappedListener);
 
       return () => {
+        active = false;
         transport.removeListener(ipcChannels.event, wrappedListener);
       };
     },

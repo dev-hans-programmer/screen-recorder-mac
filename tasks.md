@@ -485,14 +485,14 @@ A task is complete when:
 
 ## Phase 12 — Testing and quality validation
 
-- [ ] T120 Add domain unit tests.
+- [x] T120 Add domain unit tests.
   - Test value objects.
   - Test recording state transitions.
   - Test profile validation.
   - Test region bounds and coordinate conversion.
   - Acceptance: core business rules are covered without Electron or macOS dependencies.
 
-- [ ] T121 Add application use-case tests.
+- [x] T121 Add application use-case tests.
   - Test success paths.
   - Test permission failures.
   - Test native-service failures.
@@ -500,21 +500,21 @@ A task is complete when:
   - Test cancellation and recovery.
   - Acceptance: use cases pass using fake ports.
 
-- [ ] T122 Add IPC contract tests.
+- [x] T122 Add IPC contract tests.
   - Test valid requests.
   - Test invalid requests.
   - Test unknown protocol versions.
   - Test event cleanup.
   - Acceptance: protocol changes fail safely and are version-aware.
 
-- [ ] T123 Add Swift unit and integration tests.
+- [x] T123 Add Swift unit and integration tests.
   - Test protocol parsing.
   - Test configuration validation.
   - Test state transitions.
   - Test writer finalization behavior.
   - Acceptance: native tests run in CI on macOS.
 
-- [ ] T124 Add packaged-app smoke tests.
+- [x] T124 Add packaged-app smoke tests.
   - Launch the packaged app.
   - Verify renderer loading.
   - Verify helper discovery.
@@ -522,7 +522,7 @@ A task is complete when:
   - Verify the output file exists and is playable.
   - Acceptance: the packaged app passes a basic end-to-end recording test.
 
-- [ ] T125 Add compatibility tests.
+- [x] T125 Add compatibility tests.
   - Test single monitor.
   - Test multiple monitors.
   - Test Retina scaling.
@@ -535,7 +535,7 @@ A task is complete when:
   - Test sleep/wake and display disconnect scenarios.
   - Acceptance: results are recorded in a compatibility matrix.
 
-- [ ] T126 Add performance tests.
+- [x] T126 Add performance tests.
   - 1080p60 recording.
   - 4K30 recording.
   - 4K60 recording where supported.
@@ -544,7 +544,7 @@ A task is complete when:
   - Helper restart and recovery.
   - Acceptance: results meet or clearly document deviations from `docs/performance.md`.
 
-- [ ] T127 Add quality validation tools.
+- [x] T127 Add quality validation tools.
   - Inspect output dimensions.
   - Inspect frame rate.
   - Inspect audio/video duration.

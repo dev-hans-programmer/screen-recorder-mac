@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { mkdir, statfs } from 'node:fs/promises';
 
 import {
   createDurationMs,
@@ -87,6 +88,25 @@ interface ActiveNativeRecording {
   lastDroppedFrames: number;
 }
 
+const minimumFreeDiskReserveBytes = 512 * 1024 * 1024;
+
+/** Keeps enough space for startup overhead plus roughly thirty seconds of the selected profile. */
+export function estimateRecordingDiskRequirement(request: ValidatedRecordingRequest): number {
+  const bytesPerSecond =
+    request.effective.profileId === 'master'
+      ? 100 * 1024 * 1024
+      : request.effective.profileId === 'balanced'
+        ? 8 * 1024 * 1024
+        : 12 * 1024 * 1024;
+  return minimumFreeDiskReserveBytes + bytesPerSecond * 30;
+}
+
+async function getAvailableDiskBytes(directory: string): Promise<number> {
+  await mkdir(directory, { recursive: true });
+  const statistics = await statfs(directory);
+  return statistics.bavail * statistics.bsize;
+}
+
 export interface NativeRecordingEngineOptions {
   readonly supervisor: NativeServiceSupervisor;
   readonly outputDirectory: () => Promise<string>;
@@ -94,6 +114,7 @@ export interface NativeRecordingEngineOptions {
   readonly events: ApplicationEventPublisher;
   readonly logger?: Logger;
   readonly progressIntervalMs?: number;
+  readonly availableDiskBytes?: (directory: string) => Promise<number>;
 }
 
 export class NativeRecordingEngine implements RecordingEnginePort {
@@ -103,6 +124,7 @@ export class NativeRecordingEngine implements RecordingEnginePort {
   private readonly events: ApplicationEventPublisher;
   private readonly logger: Logger | undefined;
   private readonly progressIntervalMs: number;
+  private readonly availableDiskBytes: (directory: string) => Promise<number>;
   private active: ActiveNativeRecording | undefined;
 
   public constructor(options: NativeRecordingEngineOptions) {
@@ -112,6 +134,7 @@ export class NativeRecordingEngine implements RecordingEnginePort {
     this.events = options.events;
     this.logger = options.logger;
     this.progressIntervalMs = options.progressIntervalMs ?? 500;
+    this.availableDiskBytes = options.availableDiskBytes ?? getAvailableDiskBytes;
   }
 
   public async start(
@@ -124,6 +147,24 @@ export class NativeRecordingEngine implements RecordingEnginePort {
       const outputDirectory = await this.outputDirectory();
       if (outputDirectory.trim().length === 0) {
         throw new DomainError('INVALID_PREFERENCES', 'The output directory cannot be empty.');
+      }
+
+      const requiredBytes = estimateRecordingDiskRequirement(request);
+      const availableBytes = await this.availableDiskBytes(outputDirectory);
+      if (availableBytes < requiredBytes) {
+        this.events.publish({
+          version: 1,
+          type: 'recording.disk-space-warning',
+          sessionId,
+          availableBytes,
+          estimatedRequiredBytes: requiredBytes,
+          occurredAt: this.clock.now(),
+        });
+        throw new DomainError(
+          'INSUFFICIENT_DISK_SPACE',
+          'There is not enough free disk space to start this recording safely.',
+          { availableBytes, requiredBytes },
+        );
       }
 
       await this.request('configureCapture', {

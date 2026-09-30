@@ -17,3 +17,6 @@ native/**/.build/
 
 *.log
 *.tsbuildinfo
+
+# Hardware-specific validation output is generated locally and attached to CI runs.
+validation-results/

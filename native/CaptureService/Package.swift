@@ -9,6 +9,7 @@ let package = Package(
   ],
   products: [
     .executable(name: "CaptureService", targets: ["CaptureService"]),
+    .executable(name: "MediaInspector", targets: ["MediaInspector"]),
   ],
   targets: [
     .target(
@@ -24,9 +25,18 @@ let package = Package(
       path: "Sources/CaptureServiceApp"
     ),
     .executableTarget(
+      name: "MediaInspector",
+      path: "Tools/MediaInspector"
+    ),
+    .executableTarget(
       name: "CaptureServiceSmokeTests",
       dependencies: ["CaptureServiceCore"],
       path: "Tests/CaptureServiceSmokeTests"
+    ),
+    .executableTarget(
+      name: "CaptureServiceCoreTests",
+      dependencies: ["CaptureServiceCore"],
+      path: "Tests/CaptureServiceCoreTests"
     ),
   ]
 )

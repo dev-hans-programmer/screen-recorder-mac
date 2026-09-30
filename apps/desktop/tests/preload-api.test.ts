@@ -72,6 +72,34 @@ describe('secure preload API', () => {
     expect(removedListener).toBe(registeredListener);
   });
 
+  it('drops malformed events and cleanup prevents subsequent delivery', () => {
+    let listener: ((event: unknown, payload: unknown) => void) | undefined;
+    const api = createScreenRecorderApi({
+      invoke: () => Promise.resolve(),
+      on: (_channel, registered) => {
+        listener = registered;
+      },
+      removeListener: () => undefined,
+    });
+    const received: string[] = [];
+    const unsubscribe = api.onEvent((event) => received.push(event.type));
+
+    listener?.(undefined, { protocolVersion: 999, type: 'recording.progress' });
+    unsubscribe();
+    listener?.(undefined, {
+      protocolVersion,
+      eventId: 'after-cleanup',
+      version: 1,
+      type: 'recording.progress',
+      sessionId: 'session-1',
+      durationMs: 1,
+      encodedBytes: 1,
+      occurredAt: 1,
+    });
+
+    expect(received).toEqual([]);
+  });
+
   it('exposes diagnostics export without granting renderer filesystem access', async () => {
     const calls: unknown[] = [];
     const api = createScreenRecorderApi(

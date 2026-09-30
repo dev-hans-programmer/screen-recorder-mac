@@ -104,3 +104,20 @@ During development, use macOS Activity Monitor, Console, native `OSLog`, applica
 - A change must not introduce unbounded queue or memory growth.
 - A change that affects capture or encoding must include a before/after performance result.
 - Performance regressions must be fixed or documented before release-candidate testing.
+
+## Phase 12 validation baseline — 2026-09-30
+
+The local Mac16,8 (24 GiB, macOS 26.0.1) passed a short 1920×1080 at 60 FPS H.264 capture with zero
+true writer/queue drops and a playable AVFoundation/ffprobe result. ScreenCaptureKit idle, blank,
+and suspended status samples are intentionally excluded from the dropped-frame count because they
+do not represent lost images. The local Retina source advertised a physical 3024×1964 maximum, so
+4K30 and 4K60 were classified as unavailable rather than tested with synthetic upscaling.
+
+The 5,000-item catalog initialization regression test completes under one second, and the Library
+mounts cards in 80-item batches as the user scrolls. Helper timeout/restart and interrupted-session
+recovery are covered by deterministic supervisor/application tests.
+
+Run `pnpm test:performance` to produce the machine-specific short report. The 30-minute run uses
+`node scripts/hardware-validation.mjs --performance --include-long`; the two-hour memory soak,
+sleep/wake, and display-disconnect tests remain release-candidate manual checks. Generated reports
+belong under `validation-results/` and should be uploaded with CI or release-test artifacts.

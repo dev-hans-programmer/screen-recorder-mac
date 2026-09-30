@@ -39,9 +39,13 @@ final class RecordingAssetWriter: @unchecked Sendable {
   private var isPaused = false
   private var pauseStartedAt: CMTime?
   private var totalPausedDurationSeconds = 0.0
+  private var wallClockStartedAt: TimeInterval?
+  private var wallClockPauseStartedAt: TimeInterval?
+  private var totalWallClockPausedSeconds = 0.0
   private var sessionStartTime: CMTime?
   private var lastSourceVideoTimestamp: CMTime?
   private var lastVideoTimestamp: CMTime?
+  private var lastEncodedVideoSampleBuffer: CMSampleBuffer?
   private var lastSystemAudioTimestamp: CMTime?
   private var lastMicrophoneTimestamp: CMTime?
   private var failureMessage: String?
@@ -269,6 +273,7 @@ final class RecordingAssetWriter: @unchecked Sendable {
       self.isPaused = true
       self.diagnostics.setPaused(true)
       self.pauseStartedAt = self.lastSourceVideoTimestamp
+      self.wallClockPauseStartedAt = ProcessInfo.processInfo.systemUptime
     }
   }
 
@@ -277,6 +282,13 @@ final class RecordingAssetWriter: @unchecked Sendable {
       guard let self, self.isPaused, !self.finishRequested else { return }
       self.isPaused = false
       self.diagnostics.setPaused(false)
+      if let wallClockPauseStartedAt = self.wallClockPauseStartedAt {
+        self.totalWallClockPausedSeconds += max(
+          0,
+          ProcessInfo.processInfo.systemUptime - wallClockPauseStartedAt
+        )
+        self.wallClockPauseStartedAt = nil
+      }
     }
   }
 
@@ -333,6 +345,7 @@ final class RecordingAssetWriter: @unchecked Sendable {
       writer.startSession(atSourceTime: .zero)
       hasStartedWriting = true
       sessionStartTime = sourceTimestamp
+      wallClockStartedAt = ProcessInfo.processInfo.systemUptime
     }
 
     guard hasStartedWriting, writer.status == .writing else {
@@ -418,6 +431,7 @@ final class RecordingAssetWriter: @unchecked Sendable {
     case .video:
       lastSourceVideoTimestamp = sourceTimestamp
       lastVideoTimestamp = adjustedTimestamp
+      lastEncodedVideoSampleBuffer = adjustedSampleBuffer
     case .audio:
       lastSystemAudioTimestamp = adjustedTimestamp
     case .microphone:
@@ -452,11 +466,49 @@ final class RecordingAssetWriter: @unchecked Sendable {
       return
     }
 
-    if let lastVideoTimestamp {
-      let endTime = CMTimeAdd(
-        lastVideoTimestamp,
-        CMTime(value: 1, timescale: CMTimeScale(configuration.frameRate))
+    if let wallClockPauseStartedAt {
+      totalWallClockPausedSeconds += max(
+        0,
+        ProcessInfo.processInfo.systemUptime - wallClockPauseStartedAt
       )
+      self.wallClockPauseStartedAt = nil
+    }
+
+    if let lastVideoTimestamp {
+      let frameDuration = CMTime(value: 1, timescale: CMTimeScale(configuration.frameRate))
+      let sampleEndTime = CMTimeAdd(
+        lastVideoTimestamp,
+        frameDuration
+      )
+      // ScreenCaptureKit may emit no new complete frames while a source is perfectly static.
+      // Extend the final sample to real elapsed time so a static window still has the duration
+      // the user recorded instead of becoming a one-frame, near-zero-length movie.
+      let wallClockEndTime = CMTime(
+        seconds: wallClockDurationOnQueue(),
+        preferredTimescale: 600
+      )
+      let endTime = CMTimeMaximum(sampleEndTime, wallClockEndTime)
+
+      if
+        CMTimeCompare(wallClockEndTime, sampleEndTime) > 0,
+        let lastEncodedVideoSampleBuffer,
+        videoInput.isReadyForMoreMediaData
+      {
+        let duplicateTimestamp = CMTimeSubtract(endTime, frameDuration)
+        guard
+          let duplicate = sampleBuffer(
+            lastEncodedVideoSampleBuffer,
+            replacingPresentationTime: duplicateTimestamp,
+            duration: frameDuration
+          ),
+          videoInput.append(duplicate)
+        else {
+          let message = describeWriterError(writer.error)
+          diagnostics.setWriterError(message, partialOutputPath: partialURL.path)
+          continuation.resume(throwing: NativeServiceError.fileFinalizationFailed(message))
+          return
+        }
+      }
       writer.endSession(atSourceTime: endTime)
     }
     videoInput.markAsFinished()
@@ -539,9 +591,22 @@ final class RecordingAssetWriter: @unchecked Sendable {
   }
 
   private func durationSecondsOnQueue() -> Double {
-    guard let start = sessionStartTime, let end = lastSourceVideoTimestamp else { return 0 }
-    let duration = CMTimeGetSeconds(CMTimeSubtract(end, start)) - totalPausedDurationSeconds
-    return duration.isFinite ? max(0, duration) : 0
+    let sourceDuration: Double
+    if let start = sessionStartTime, let end = lastSourceVideoTimestamp {
+      let duration = CMTimeGetSeconds(CMTimeSubtract(end, start)) - totalPausedDurationSeconds
+      sourceDuration = duration.isFinite ? max(0, duration) : 0
+    } else {
+      sourceDuration = 0
+    }
+    return max(sourceDuration, wallClockDurationOnQueue())
+  }
+
+  private func wallClockDurationOnQueue() -> Double {
+    guard let wallClockStartedAt else { return 0 }
+    return max(
+      0,
+      ProcessInfo.processInfo.systemUptime - wallClockStartedAt - totalWallClockPausedSeconds
+    )
   }
 
   private func failOnQueue(message: String) {
@@ -599,6 +664,64 @@ final class RecordingAssetWriter: @unchecked Sendable {
           timingInfo[index].decodeTimeStamp,
           offset
         )
+      }
+    }
+
+    var copiedSampleBuffer: CMSampleBuffer?
+    guard CMSampleBufferCreateCopyWithNewTiming(
+      allocator: nil,
+      sampleBuffer: sampleBuffer,
+      sampleTimingEntryCount: timingInfo.count,
+      sampleTimingArray: &timingInfo,
+      sampleBufferOut: &copiedSampleBuffer
+    ) == noErr else {
+      return nil
+    }
+    return copiedSampleBuffer
+  }
+
+  private func sampleBuffer(
+    _ sampleBuffer: CMSampleBuffer,
+    replacingPresentationTime presentationTime: CMTime,
+    duration: CMTime
+  ) -> CMSampleBuffer? {
+    var timingCount = 0
+    guard CMSampleBufferGetSampleTimingInfoArray(
+      sampleBuffer,
+      entryCount: 0,
+      arrayToFill: nil,
+      entriesNeededOut: &timingCount
+    ) == noErr, timingCount > 0 else {
+      return nil
+    }
+
+    var timingInfo = [CMSampleTimingInfo](
+      repeating: CMSampleTimingInfo(
+        duration: duration,
+        presentationTimeStamp: presentationTime,
+        decodeTimeStamp: .invalid
+      ),
+      count: timingCount
+    )
+    let originalPresentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+    let offset = CMTimeSubtract(presentationTime, originalPresentationTime)
+    guard CMSampleBufferGetSampleTimingInfoArray(
+      sampleBuffer,
+      entryCount: timingCount,
+      arrayToFill: &timingInfo,
+      entriesNeededOut: &timingCount
+    ) == noErr else {
+      return nil
+    }
+
+    for index in timingInfo.indices {
+      timingInfo[index].duration = duration
+      timingInfo[index].presentationTimeStamp = CMTimeAdd(
+        timingInfo[index].presentationTimeStamp,
+        offset
+      )
+      if timingInfo[index].decodeTimeStamp.isValid {
+        timingInfo[index].decodeTimeStamp = CMTimeAdd(timingInfo[index].decodeTimeStamp, offset)
       }
     }
 
