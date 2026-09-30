@@ -7,6 +7,7 @@ import type {
   IpcEvent,
   IpcResponse,
   RecordingArtifactDto,
+  RecordingEditRequestDto,
   RecordingMetadataDto,
   RecordingRequestDto,
   ShortcutAction,
@@ -31,6 +32,8 @@ export interface ScreenRecorderApi {
   stopRecording(sessionId: string): Promise<RecordingArtifactDto>;
   listRecordings(): Promise<readonly RecordingMetadataDto[]>;
   getRecordingThumbnail(recordingId: string): Promise<string | null>;
+  getRecordingMediaUrl(recordingId: string): Promise<string>;
+  exportEditedRecording(edit: RecordingEditRequestDto): Promise<RecordingMetadataDto>;
   renameRecording(recordingId: string, title: string): Promise<RecordingMetadataDto>;
   openRecording(recordingId: string): Promise<void>;
   revealRecording(recordingId: string): Promise<void>;

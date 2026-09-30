@@ -21,6 +21,7 @@ identity, creation time, and file size.
 ## Library actions
 
 - Open launches the recording with the current macOS default application.
+- Edit opens the non-destructive lightweight editor and exports a separate recording.
 - Rename changes both the media filename and its metadata title. Existing filenames are never
   overwritten.
 - Reveal selects the media file in Finder.

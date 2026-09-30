@@ -68,6 +68,21 @@ export interface NativeRecordingResultDto {
   readonly peakFileWriteBytesPerSecond: number;
 }
 
+export interface NativeEditedRecordingResultDto {
+  readonly status: string;
+  readonly filePath: string;
+  readonly thumbnailPath: string | null;
+  readonly profileId: string;
+  readonly codec: string;
+  readonly width: number;
+  readonly height: number;
+  readonly frameRate: number;
+  readonly durationMs: number;
+  readonly fileSizeBytes: number;
+  readonly hasSystemAudio: boolean;
+  readonly hasMicrophone: boolean;
+}
+
 export interface NativeHealthDto {
   readonly state: string;
   readonly lastHeartbeatAt: number;
@@ -261,6 +276,27 @@ export function parseNativeRecordingResult(value: unknown): NativeRecordingResul
       result.peakFileWriteBytesPerSecond,
       'peakFileWriteBytesPerSecond',
     ),
+  };
+}
+
+export function parseNativeEditedRecordingResult(value: unknown): NativeEditedRecordingResultDto {
+  const result = record(value, 'edited recording');
+  return {
+    status: stringValue(result.status, 'status'),
+    filePath: stringValue(result.filePath, 'filePath'),
+    thumbnailPath:
+      result.thumbnailPath === null || result.thumbnailPath === undefined
+        ? null
+        : stringValue(result.thumbnailPath, 'thumbnailPath'),
+    profileId: stringValue(result.profileId, 'profileId'),
+    codec: stringValue(result.codec, 'codec'),
+    width: finiteNumber(result.width, 'width'),
+    height: finiteNumber(result.height, 'height'),
+    frameRate: finiteNumber(result.frameRate, 'frameRate'),
+    durationMs: finiteNumber(result.durationMs, 'durationMs'),
+    fileSizeBytes: finiteNumber(result.fileSizeBytes, 'fileSizeBytes'),
+    hasSystemAudio: booleanValue(result.hasSystemAudio, 'hasSystemAudio'),
+    hasMicrophone: booleanValue(result.hasMicrophone, 'hasMicrophone'),
   };
 }
 

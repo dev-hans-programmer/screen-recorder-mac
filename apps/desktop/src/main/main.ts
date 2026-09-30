@@ -18,11 +18,16 @@ import {
   writePackagedSmokeReport,
 } from './infrastructure/packaged-smoke-probe';
 import { RegionSelectionManager } from './infrastructure/region-selection-manager';
+import {
+  installRecordingMediaProtocol,
+  registerRecordingMediaScheme,
+} from './infrastructure/recording-media-protocol';
 import { createWindowEventPublisher } from './ipc/ipc-event-publisher';
 import { registerIpcController } from './ipc/ipc-controller';
 import { buildContentSecurityPolicy, isAllowedRendererUrl } from './security/security-policy';
 
 const runtimeConfig = loadRuntimeConfig(process.env);
+registerRecordingMediaScheme();
 const packagedSmokeReportPath = process.env['SCREEN_RECORDER_PACKAGED_SMOKE_REPORT'];
 const packagedSmokeUserData = process.env['SCREEN_RECORDER_PACKAGED_SMOKE_USER_DATA'];
 if (packagedSmokeReportPath !== undefined && packagedSmokeUserData !== undefined) {
@@ -113,6 +118,11 @@ function createMainWindow(): void {
             : path.join(packagedSmokeUserData, 'recordings'),
         libraryDatabasePath: path.join(app.getPath('userData'), 'library', 'recordings.sqlite3'),
         thumbnailCacheDirectory: path.join(app.getPath('userData'), 'library', 'thumbnails'),
+        editorThumbnailStagingDirectory: path.join(
+          app.getPath('userData'),
+          'library',
+          'editor-posters',
+        ),
         preferencesFilePath: path.join(app.getPath('userData'), 'preferences.json'),
         diagnosticsFilePath: path.join(app.getPath('userData'), 'diagnostics', 'recordings.json'),
         diagnosticsReport,
@@ -128,6 +138,7 @@ function createMainWindow(): void {
       logger.info('Application shutdown completed.');
       await logger.flush();
     });
+    installRecordingMediaProtocol(applicationContainer);
     logger.info('Main window and application services were created.');
   }
 

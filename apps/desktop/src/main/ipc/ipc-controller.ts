@@ -9,6 +9,7 @@ import {
 
 import type { ApplicationContainer } from '../application/composition-root';
 import type { RegionSelectionManager } from '../infrastructure/region-selection-manager';
+import { recordingMediaUrl } from '../infrastructure/recording-media-url';
 import {
   toCapturePermissionsDto,
   toCaptureSourceDto,
@@ -16,6 +17,7 @@ import {
   toPreferencesDto,
   toPreferencesPatch,
   toRecordingArtifactDto,
+  toRecordingEditPlanInput,
   toRecordingMetadataDto,
   toRecordingRequest,
   toRecordingSessionSnapshotDto,
@@ -189,6 +191,9 @@ async function dispatchRequest(
         (await container.useCases.getRecordingThumbnail.execute(request.payload.recordingId)) ??
           null,
       );
+    case 'library.media-url':
+      await container.useCases.getRecordingMedia.execute(request.payload.recordingId);
+      return successResponse(request, recordingMediaUrl(request.payload.recordingId));
     case 'library.rename':
       return successResponse(
         request,
@@ -211,6 +216,15 @@ async function dispatchRequest(
     case 'library.open-folder':
       await container.useCases.openRecordingsFolder.execute();
       return successResponse(request, null);
+    case 'editor.export':
+      return successResponse(
+        request,
+        toRecordingMetadataDto(
+          await container.useCases.exportEditedRecording.execute(
+            toRecordingEditPlanInput(request.payload.edit),
+          ),
+        ),
+      );
     case 'system.open-permission-settings':
       await container.useCases.openPermissionSettings.execute(request.payload.target);
       return successResponse(request, null);

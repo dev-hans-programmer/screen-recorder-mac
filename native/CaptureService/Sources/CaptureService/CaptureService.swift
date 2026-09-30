@@ -4,6 +4,7 @@ actor CaptureService {
   private let permissions = PermissionInspector()
   private let discovery = SourceDiscovery()
   private let diagnostics = CaptureDiagnostics()
+  private let editor = RecordingEditor()
   private let streamCoordinator: CaptureStreamCoordinator
   private var configuration: CaptureConfiguration?
   private var state = "idle"
@@ -79,6 +80,7 @@ actor CaptureService {
             "pauseCapture",
             "resumeCapture",
             "stopCapture",
+            "exportRecording",
             "getHealth",
             "shutdown",
           ]
@@ -164,6 +166,24 @@ actor CaptureService {
         return try encodePayload(health())
       } catch {
         state = "failed"
+        throw error
+      }
+
+    case "exportRecording":
+      guard state == "idle" else {
+        throw NativeServiceError.invalidConfiguration(
+          "Recording edits can only be exported while capture is idle."
+        )
+      }
+      let payload = try decodePayload(RecordingEditPayload.self, from: request.payload)
+      state = "editing"
+      do {
+        let result = try await editor.export(payload)
+        state = "idle"
+        NativeLog.capture.info("Edited recording exported")
+        return try encodePayload(result)
+      } catch {
+        state = "idle"
         throw error
       }
 

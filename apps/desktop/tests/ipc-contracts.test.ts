@@ -207,4 +207,47 @@ describe('IPC contracts', () => {
       }),
     ).toThrowError(IpcProtocolError);
   });
+
+  it('validates editor exports and opaque media URLs', () => {
+    const request = parseIpcRequest({
+      protocolVersion,
+      requestId: 'edit-1',
+      command: 'editor.export',
+      payload: {
+        edit: {
+          recordingId: 'recording-1',
+          title: 'Product demo edit',
+          trimStartMs: 1_000,
+          trimEndMs: 5_000,
+          crop: { x: 0, y: 0, width: 1, height: 1 },
+          rotation: 90,
+          mutedRanges: [{ startMs: 2_000, endMs: 3_000 }],
+          posterTimeMs: 1_500,
+        },
+      },
+    });
+    const mediaResponse = parseIpcResponse('library.media-url', {
+      protocolVersion,
+      requestId: 'media-1',
+      command: 'library.media-url',
+      ok: true,
+      data: 'screen-recorder-media://recording/recording-1',
+    });
+
+    expect(request.command).toBe('editor.export');
+    expect(mediaResponse.data).not.toContain('/Users/');
+    expect(() =>
+      parseIpcRequest({
+        protocolVersion,
+        requestId: 'bad-edit',
+        command: 'editor.export',
+        payload: {
+          edit: {
+            ...(request.command === 'editor.export' ? request.payload.edit : {}),
+            crop: { x: 0.8, y: 0, width: 0.5, height: 1 },
+          },
+        },
+      }),
+    ).toThrowError(IpcProtocolError);
+  });
 });

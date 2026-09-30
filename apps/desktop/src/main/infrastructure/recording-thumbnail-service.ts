@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { nativeImage, type NativeImage } from 'electron';
@@ -40,6 +40,22 @@ export class RecordingThumbnailService implements RecordingThumbnailPort {
         .filter((fileName) => fileName.startsWith(prefix))
         .map((fileName) => rm(path.join(this.cacheDirectory, fileName), { force: true })),
     );
+  }
+
+  public async storeFromFile(recording: RecordingMetadata, sourcePath: string): Promise<void> {
+    await mkdir(this.cacheDirectory, { recursive: true });
+    const cachePath = this.cachePath(recording);
+    const temporaryPath = `${cachePath}.${randomUUID()}.tmp`;
+    try {
+      const sourceImage = this.images.createFromBuffer(await readFile(sourcePath));
+      if (sourceImage.isEmpty()) throw new Error('The selected poster frame is not a valid image.');
+      await copyFile(sourcePath, temporaryPath);
+      await rename(temporaryPath, cachePath);
+    } finally {
+      // Poster files are staging artifacts owned by this service, including failure paths.
+      await rm(temporaryPath, { force: true });
+      await rm(sourcePath, { force: true });
+    }
   }
 
   private async loadOrCreate(recording: RecordingMetadata): Promise<string | undefined> {

@@ -10,6 +10,7 @@ import {
   createCaptureSourceSelection,
   createDurationMs,
   createRecordingArtifact,
+  createRecordingEditPlan,
   createRecordingFilePath,
   createPixelDimensions,
   createFrameRate,
@@ -163,5 +164,53 @@ describe('preferences domain model', () => {
       startStop: 'CommandOrControl+Shift+R',
       pauseResume: 'CommandOrControl+Shift+K',
     });
+  });
+});
+
+describe('recording edit plan', () => {
+  it('validates and merges overlapping mute ranges without mutating the source', () => {
+    const plan = createRecordingEditPlan(
+      {
+        recordingId: 'recording-1',
+        title: '  Product demo edit  ',
+        trimStartMs: 1_000,
+        trimEndMs: 9_000,
+        crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+        rotation: 90,
+        mutedRanges: [
+          { startMs: 4_000, endMs: 5_000 },
+          { startMs: 2_000, endMs: 4_500 },
+        ],
+        posterTimeMs: 3_000,
+      },
+      10_000,
+    );
+
+    expect(plan).toMatchObject({ title: 'Product demo edit', rotation: 90 });
+    expect(plan.mutedRanges).toEqual([{ startMs: 2_000, endMs: 5_000 }]);
+    expect(Object.isFrozen(plan)).toBe(true);
+  });
+
+  it('rejects edits outside source, crop, and timeline bounds', () => {
+    const valid = {
+      recordingId: 'recording-1',
+      title: 'Edit',
+      trimStartMs: 0,
+      trimEndMs: 5_000,
+      crop: { x: 0, y: 0, width: 1, height: 1 },
+      rotation: 0 as const,
+      mutedRanges: [],
+      posterTimeMs: 0,
+    };
+
+    expect(() => createRecordingEditPlan({ ...valid, trimEndMs: 5_001 }, 5_000)).toThrowError(
+      DomainError,
+    );
+    expect(() =>
+      createRecordingEditPlan({ ...valid, crop: { x: 0.5, y: 0, width: 0.6, height: 1 } }, 5_000),
+    ).toThrowError(DomainError);
+    expect(() =>
+      createRecordingEditPlan({ ...valid, mutedRanges: [{ startMs: 4_000, endMs: 5_100 }] }, 5_000),
+    ).toThrowError(DomainError);
   });
 });

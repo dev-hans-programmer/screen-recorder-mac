@@ -202,6 +202,36 @@ const recordingTitleSchema = z
   .min(1)
   .max(180)
   .refine((value) => !/[/:\0]/u.test(value), 'Recording names cannot contain “/” or “:”.');
+const normalizedCropSchema = z
+  .object({
+    x: z.number().finite().min(0).max(1),
+    y: z.number().finite().min(0).max(1),
+    width: z.number().finite().min(0.02).max(1),
+    height: z.number().finite().min(0.02).max(1),
+  })
+  .strict()
+  .refine((crop) => crop.x + crop.width <= 1.000_001, 'Crop exceeds the video width.')
+  .refine((crop) => crop.y + crop.height <= 1.000_001, 'Crop exceeds the video height.');
+const recordingMuteRangeSchema = z
+  .object({
+    startMs: z.number().finite().nonnegative(),
+    endMs: z.number().finite().positive(),
+  })
+  .strict()
+  .refine((range) => range.endMs > range.startMs, 'Mute ranges must have a positive duration.');
+
+export const recordingEditRequestSchema = z
+  .object({
+    recordingId: identifierSchema,
+    title: recordingTitleSchema,
+    trimStartMs: z.number().finite().nonnegative(),
+    trimEndMs: z.number().finite().positive(),
+    crop: normalizedCropSchema,
+    rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]),
+    mutedRanges: z.array(recordingMuteRangeSchema).max(100),
+    posterTimeMs: z.number().finite().nonnegative(),
+  })
+  .strict();
 
 export const shortcutMessageSchema = z
   .object({
@@ -236,6 +266,7 @@ export const ipcRequestSchema = z.discriminatedUnion('command', [
   requestSchema('recording.stop', sessionIdPayloadSchema),
   requestSchema('library.list', emptyPayloadSchema),
   requestSchema('library.thumbnail', recordingIdPayloadSchema),
+  requestSchema('library.media-url', recordingIdPayloadSchema),
   requestSchema(
     'library.rename',
     z.object({ recordingId: identifierSchema, title: recordingTitleSchema }).strict(),
@@ -244,6 +275,7 @@ export const ipcRequestSchema = z.discriminatedUnion('command', [
   requestSchema('library.reveal', recordingIdPayloadSchema),
   requestSchema('library.delete', recordingIdPayloadSchema),
   requestSchema('library.open-folder', emptyPayloadSchema),
+  requestSchema('editor.export', z.object({ edit: recordingEditRequestSchema }).strict()),
   requestSchema(
     'system.open-permission-settings',
     z.object({ target: z.enum(['screen-recording', 'microphone']) }).strict(),
@@ -283,11 +315,13 @@ const responseDataSchemas = {
   'recording.stop': recordingArtifactSchema,
   'library.list': z.array(recordingMetadataSchema),
   'library.thumbnail': z.string().startsWith('data:image/').nullable(),
+  'library.media-url': z.string().startsWith('screen-recorder-media://recording/'),
   'library.rename': recordingMetadataSchema,
   'library.open': z.null(),
   'library.reveal': z.null(),
   'library.delete': z.null(),
   'library.open-folder': z.null(),
+  'editor.export': recordingMetadataSchema,
   'system.open-permission-settings': z.null(),
   'app.relaunch': z.null(),
   'diagnostics.export': z.string().min(1).nullable(),
@@ -526,5 +560,6 @@ export type AppPreferencesDto = z.infer<typeof appPreferencesSchema>;
 export type AppPreferencesPatchDto = z.infer<typeof appPreferencesPatchSchema>;
 export type RecordingArtifactDto = z.infer<typeof recordingArtifactSchema>;
 export type RecordingMetadataDto = z.infer<typeof recordingMetadataSchema>;
+export type RecordingEditRequestDto = z.infer<typeof recordingEditRequestSchema>;
 export type RecordingSessionSnapshotDto = z.infer<typeof recordingSessionSnapshotSchema>;
 export type ShortcutAction = z.infer<typeof shortcutMessageSchema>['action'];

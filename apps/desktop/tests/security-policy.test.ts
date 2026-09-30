@@ -24,6 +24,7 @@ describe('Electron renderer security policy', () => {
     expect(contentSecurityPolicy).toContain("object-src 'none'");
     expect(contentSecurityPolicy).toContain("frame-ancestors 'none'");
     expect(contentSecurityPolicy).toContain("form-action 'none'");
+    expect(contentSecurityPolicy).toContain("media-src 'self' screen-recorder-media:");
   });
 
   it('allows the Vite preamble only in development', () => {

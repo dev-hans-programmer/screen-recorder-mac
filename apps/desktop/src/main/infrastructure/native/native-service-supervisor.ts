@@ -42,6 +42,7 @@ export class NativeServiceSupervisor {
   >();
   private activeSessionId: string | undefined;
   private startingSessionId: string | undefined;
+  private editorOperationId: string | undefined;
   private disposed = false;
 
   public constructor(options: NativeServiceSupervisorOptions) {
@@ -116,7 +117,11 @@ export class NativeServiceSupervisor {
   }
 
   public reserveRecording(sessionId: string): void {
-    if (this.activeSessionId !== undefined || this.startingSessionId !== undefined) {
+    if (
+      this.activeSessionId !== undefined ||
+      this.startingSessionId !== undefined ||
+      this.editorOperationId !== undefined
+    ) {
       throw new DomainError(
         'RECORDING_ALREADY_ACTIVE',
         'Only one native recording session can be active at a time.',
@@ -124,6 +129,24 @@ export class NativeServiceSupervisor {
     }
 
     this.startingSessionId = sessionId;
+  }
+
+  public reserveEditor(operationId: string): void {
+    if (
+      this.activeSessionId !== undefined ||
+      this.startingSessionId !== undefined ||
+      this.editorOperationId !== undefined
+    ) {
+      throw new DomainError(
+        'RECORDING_ALREADY_ACTIVE',
+        'Capture or another editor export is already active.',
+      );
+    }
+    this.editorOperationId = operationId;
+  }
+
+  public releaseEditor(operationId: string): void {
+    if (this.editorOperationId === operationId) this.editorOperationId = undefined;
   }
 
   public commitRecording(sessionId: string): void {
@@ -161,6 +184,7 @@ export class NativeServiceSupervisor {
     this.disposed = true;
     this.activeSessionId = undefined;
     this.startingSessionId = undefined;
+    this.editorOperationId = undefined;
     await this.client.dispose();
   }
 }

@@ -5,7 +5,9 @@ import {
   ChooseRecordingDirectoryUseCase,
   DeleteRecordingUseCase,
   ExportDiagnosticsUseCase,
+  ExportEditedRecordingUseCase,
   GetRecordingThumbnailUseCase,
+  GetRecordingMediaUseCase,
   GetPreferencesUseCase,
   ListCaptureSourcesUseCase,
   ListRecordingsUseCase,
@@ -44,6 +46,7 @@ import {
   NativeRecordingEngine,
 } from '../infrastructure/native/native-capture-adapter';
 import { NativeServiceSupervisor } from '../infrastructure/native/native-service-supervisor';
+import { NativeRecordingEditor } from '../infrastructure/native/native-recording-editor';
 
 class SystemClock implements Clock {
   public now(): number {
@@ -65,6 +68,8 @@ export interface ApplicationContainer {
     readonly chooseRecordingDirectory: ChooseRecordingDirectoryUseCase;
     readonly deleteRecording: DeleteRecordingUseCase;
     readonly exportDiagnostics: ExportDiagnosticsUseCase;
+    readonly exportEditedRecording: ExportEditedRecordingUseCase;
+    readonly getRecordingMedia: GetRecordingMediaUseCase;
     readonly getPreferences: GetPreferencesUseCase;
     readonly getRecordingThumbnail: GetRecordingThumbnailUseCase;
     readonly listCaptureSources: ListCaptureSourcesUseCase;
@@ -92,6 +97,7 @@ export interface ApplicationContainerOptions {
   readonly defaultOutputDirectory: () => string;
   readonly libraryDatabasePath: string;
   readonly thumbnailCacheDirectory: string;
+  readonly editorThumbnailStagingDirectory: string;
   readonly preferencesFilePath: string;
   readonly diagnosticsFilePath: string;
   readonly diagnosticsReport: DiagnosticsReportPort;
@@ -139,15 +145,21 @@ export function createApplicationContainer(
     onLog: (message) => logger.debug('Native CaptureService output.', { message }),
   });
   const capture = new NativeCapturePort(supervisor);
+  const outputDirectory = async (): Promise<string> => {
+    const preferencesSnapshot = await preferences.get();
+    return preferencesSnapshot.outputDirectory.trim() || options.defaultOutputDirectory();
+  };
   const engine = new NativeRecordingEngine({
     supervisor,
     clock,
     events,
     logger,
-    outputDirectory: async () => {
-      const preferencesSnapshot = await preferences.get();
-      return preferencesSnapshot.outputDirectory.trim() || options.defaultOutputDirectory();
-    },
+    outputDirectory,
+  });
+  const editor = new NativeRecordingEditor({
+    supervisor,
+    outputDirectory,
+    thumbnailStagingDirectory: options.editorThumbnailStagingDirectory,
   });
 
   return {
@@ -162,6 +174,16 @@ export function createApplicationContainer(
       ),
       deleteRecording: new DeleteRecordingUseCase(catalog, files, thumbnails),
       exportDiagnostics: new ExportDiagnosticsUseCase(diagnostics, options.diagnosticsReport),
+      exportEditedRecording: new ExportEditedRecordingUseCase(
+        catalog,
+        sessions,
+        editor,
+        thumbnails,
+        clock,
+        ids,
+        logger,
+      ),
+      getRecordingMedia: new GetRecordingMediaUseCase(catalog),
       getPreferences: new GetPreferencesUseCase(preferences),
       getRecordingThumbnail: new GetRecordingThumbnailUseCase(catalog, thumbnails),
       listCaptureSources: new ListCaptureSourcesUseCase(capture),

@@ -122,6 +122,18 @@ function createApi() {
     stopRecording: vi.fn(async () => artifact),
     listRecordings: vi.fn(async () => []),
     getRecordingThumbnail: vi.fn(async () => null),
+    getRecordingMediaUrl: vi.fn(
+      async (recordingId: string) => `screen-recorder-media://recording/${recordingId}`,
+    ),
+    exportEditedRecording: vi.fn(async (): Promise<RecordingMetadataDto> => ({
+      ...artifact,
+      id: 'edited-1',
+      title: 'Edited recording',
+      schemaVersion: 1,
+      availability: 'available',
+      failure: null,
+      recovery: null,
+    })),
     renameRecording: vi.fn(async (_recordingId, title): Promise<RecordingMetadataDto> => ({
       ...artifact,
       title,
@@ -181,6 +193,44 @@ describe('RendererStore', () => {
     expect(store.getState().selectedSourceId).toBe(source.id);
     expect(store.getState().preferences?.defaultProfileId).toBe('balanced');
     expect(store.getState().permissions?.screenRecording).toBe('granted');
+  });
+
+  it('opens the editor and returns to the library after a successful export', async () => {
+    const fixture = createApi();
+    const store = new RendererStore(fixture.api);
+    await store.initialize();
+    fixture.emit({
+      protocolVersion: 1,
+      eventId: 'completed-1',
+      version: 1,
+      type: 'recording.completed',
+      sessionId: 'session-1',
+      artifact,
+      occurredAt: 2_000,
+    });
+
+    store.openEditor(artifact.id);
+    expect(store.getState()).toMatchObject({
+      activeScreen: 'editor',
+      editorRecordingId: artifact.id,
+    });
+    await expect(
+      store.exportEditedRecording({
+        recordingId: artifact.id,
+        title: 'Edited recording',
+        trimStartMs: 0,
+        trimEndMs: 1_000,
+        crop: { x: 0, y: 0, width: 1, height: 1 },
+        rotation: 0,
+        mutedRanges: [],
+        posterTimeMs: 0,
+      }),
+    ).resolves.toBe(true);
+    expect(store.getState()).toMatchObject({
+      activeScreen: 'library',
+      editorRecordingId: null,
+      notice: 'Edited recording exported to your library.',
+    });
   });
 
   it('loads a large recording catalog without blocking state initialization', async () => {

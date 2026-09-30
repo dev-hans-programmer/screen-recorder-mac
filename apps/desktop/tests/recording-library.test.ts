@@ -150,6 +150,27 @@ describe('recording thumbnail cache', () => {
     await service.remove(metadata.id);
     expect(await readdir(cacheDirectory)).toEqual([]);
   });
+
+  it('imports an editor-selected poster into the cache and removes staging data', async () => {
+    const directory = await temporaryDirectory();
+    const cacheDirectory = path.join(directory, 'thumbnails');
+    const posterPath = path.join(directory, 'poster.png');
+    await writeFile(posterPath, 'valid poster');
+    imageMocks.createFromBuffer.mockReturnValue({
+      isEmpty: () => false,
+      toDataURL: () => 'data:image/png;base64,cG9zdGVy',
+    });
+    const service = new RecordingThumbnailService(cacheDirectory, imageMocks as never);
+    const metadata = createRecordingMetadataFromArtifact(
+      artifact(path.join(directory, 'product-demo.mp4')),
+    );
+
+    await service.storeFromFile(metadata, posterPath);
+
+    expect(await readdir(cacheDirectory)).toHaveLength(1);
+    expect(await readdir(directory)).not.toContain('poster.png');
+    await expect(service.getDataUrl(metadata)).resolves.toBe('data:image/png;base64,cG9zdGVy');
+  });
 });
 
 describe('recording file actions', () => {

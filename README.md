@@ -41,4 +41,5 @@ pnpm quality:validate "/path/to/recording.mp4"
 
 The Electron application includes the native CaptureService protocol, AVAssetWriter recording, the
 supervised Electron-to-Swift bridge, and a responsive recorder workspace with library and settings
-views. Raw media remains entirely inside the native capture pipeline.
+views. Its non-destructive lightweight editor supports trim, crop, rotation, mute ranges, and a
+selected poster frame. Raw media remains entirely inside the native capture pipeline.

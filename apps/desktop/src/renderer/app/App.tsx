@@ -4,10 +4,12 @@ import { appMetadata } from '../../shared/app-metadata';
 import { Button, Sidebar, Tooltip } from './components';
 import { getRendererStore, useRendererSelector, type RecoveryAction } from './renderer-store';
 import { LibraryView, OnboardingView, RecorderView, SettingsView } from './views';
+import { EditorView } from '../editor/EditorView';
 
 const screenTitles = {
   recorder: 'Recorder',
   library: 'Library',
+  editor: 'Editor',
   settings: 'Settings',
 } as const;
 
@@ -136,6 +138,7 @@ export function App(): ReactElement {
               <>
                 {activeScreen === 'recorder' && <RecorderView store={store} />}
                 {activeScreen === 'library' && <LibraryView store={store} />}
+                {activeScreen === 'editor' && <EditorView store={store} />}
                 {activeScreen === 'settings' && <SettingsView store={store} />}
               </>
             )}

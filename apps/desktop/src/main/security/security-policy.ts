@@ -6,6 +6,7 @@ export function buildContentSecurityPolicy(isDevelopment: boolean): string {
     `script-src ${scriptSource}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
+    "media-src 'self' screen-recorder-media:",
     "connect-src 'self' ws://localhost:5173 http://localhost:5173",
     "object-src 'none'",
     "base-uri 'none'",

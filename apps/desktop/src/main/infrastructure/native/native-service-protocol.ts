@@ -11,6 +11,7 @@ export type NativeCommand =
   | 'pauseCapture'
   | 'resumeCapture'
   | 'stopCapture'
+  | 'exportRecording'
   | 'getHealth'
   | 'heartbeat'
   | 'shutdown';

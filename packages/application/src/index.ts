@@ -1,6 +1,7 @@
 export * from './ports/capture-port';
 export * from './ports/permission-port';
 export * from './ports/platform-ports';
+export * from './ports/recording-editor-port';
 export * from './ports/recording-engine-port';
 export * from './ports/repositories';
 export * from './services/validate-recording-request';
@@ -8,7 +9,9 @@ export * from './use-cases/check-capture-permissions';
 export * from './use-cases/choose-recording-directory';
 export * from './use-cases/delete-recording';
 export * from './use-cases/export-diagnostics';
+export * from './use-cases/export-edited-recording';
 export * from './use-cases/get-recording-thumbnail';
+export * from './use-cases/get-recording-media';
 export * from './use-cases/get-preferences';
 export * from './use-cases/list-capture-sources';
 export * from './use-cases/list-recordings';

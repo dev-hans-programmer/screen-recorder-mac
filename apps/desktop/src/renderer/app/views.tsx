@@ -912,6 +912,9 @@ function RecordingCard({
             <MenuItem disabled={missing} onSelect={() => void store.openRecording(recording.id)}>
               Open
             </MenuItem>
+            <MenuItem disabled={missing} onSelect={() => store.openEditor(recording.id)}>
+              Edit
+            </MenuItem>
             <MenuItem disabled={missing} onSelect={onRename}>
               Rename
             </MenuItem>

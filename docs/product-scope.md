@@ -105,6 +105,14 @@ The first release prioritizes reliable capture, responsive controls, high-qualit
 4. If recording can continue safely, the app reports the actual downgraded profile.
 5. If recording cannot continue, the app finalizes or preserves a recoverable partial file where possible.
 
+### Lightweight edit
+
+1. User chooses Edit from a recording's Library actions.
+2. User previews and trims the recording, optionally crops, rotates, or mutes timeline ranges.
+3. User selects the current playhead as the new Library thumbnail.
+4. App exports a new recording while preserving the original file and metadata.
+5. The exported recording appears as a separate Library item.
+
 ## Deferred features
 
 The following are intentionally deferred until the core recorder is stable:
@@ -112,8 +120,8 @@ The following are intentionally deferred until the core recorder is stable:
 - Webcam overlay.
 - Camera framing and background effects.
 - Annotations, drawing, and cursor emphasis editor.
-- Video editing timeline.
-- Trimming, cropping, and export presets.
+- Multi-track video editing timeline, transitions, and compositing.
+- Custom codec, bitrate, and export-profile conversion.
 - Cloud upload.
 - Team sharing and collaboration.
 - Live streaming.

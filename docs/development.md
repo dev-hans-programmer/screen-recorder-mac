@@ -78,6 +78,11 @@ The Library supports cached native thumbnails, grid/list layouts, search, sortin
 Reveal in Finder, recoverable Trash deletion, and missing-file handling. See
 [recording-library.md](recording-library.md) for storage and safety details.
 
+Library items can also open the non-destructive lightweight editor. The editor supports trim, crop,
+90-degree rotation, mute ranges, and poster-frame selection, then exports through AVFoundation as a
+new Library item. See [lightweight-editor.md](lightweight-editor.md) for its architecture and manual
+checks.
+
 Preferences now survive restarts in a versioned, atomic JSON store. A first-run setup explains
 Screen Recording and optional microphone access, while Recorder and Settings expose recovery
 actions for denied or revoked access, required helper restarts, and stale capture sources. See

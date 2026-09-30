@@ -20,6 +20,7 @@ export interface RecordingFileActionsPort {
 
 export interface RecordingThumbnailPort {
   getDataUrl(recording: RecordingMetadata): Promise<string | undefined>;
+  storeFromFile(recording: RecordingMetadata, sourcePath: string): Promise<void>;
   remove(recordingId: string): Promise<void>;
 }
 

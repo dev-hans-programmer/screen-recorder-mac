@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ChooseRecordingDirectoryUseCase,
+  ExportEditedRecordingUseCase,
   PauseRecordingUseCase,
   RecoverInterruptedRecordingUseCase,
   ResumeRecordingUseCase,
@@ -16,6 +17,9 @@ import {
   type IdGenerator,
   type RecordingEnginePort,
   type RecordingDiagnosticsRepository,
+  type RecordingEditorExportRequest,
+  type RecordingEditorPort,
+  type RecordingThumbnailPort,
   type RecordingCatalogRepository,
   type RecordingSessionRepository,
   type StartRecordingDependencies,
@@ -28,6 +32,7 @@ import {
   createRecordingArtifact,
   createRecordingDiagnostics,
   createRecordingFilePath,
+  createRecordingMetadataFromArtifact,
   createRecordingRequest,
   defaultAppPreferences,
   type AppPreferences,
@@ -470,6 +475,92 @@ describe('recording application use cases', () => {
       ).execute(started.session.id),
     ).rejects.toMatchObject({ code: 'RECORDING_FINALIZATION_FAILURE' });
     expect(sessions.sessions.get(started.session.id)?.state).toBe('failed');
+  });
+
+  it('exports a validated non-destructive edit and imports its poster frame', async () => {
+    const sessions = new FakeSessionRepository();
+    const catalog = new FakeCatalog();
+    const source = createRecordingMetadataFromArtifact(
+      createRecordingArtifact({
+        id: 'source-1',
+        filePath: createRecordingFilePath('/tmp/source.mp4'),
+        title: 'Source',
+        createdAt: 100,
+        durationMs: createDurationMs(10_000),
+        width: 1920,
+        height: 1080,
+        frameRate: 60,
+        profileId: 'balanced',
+        codec: 'hevc',
+        hasSystemAudio: true,
+        hasMicrophone: true,
+        fileSizeBytes: 50_000,
+      }),
+    );
+    await catalog.save(source);
+    let received: RecordingEditorExportRequest | undefined;
+    const editor: RecordingEditorPort = {
+      exportRecording: async (request) => {
+        received = request;
+        return {
+          artifact: createRecordingArtifact({
+            ...source,
+            id: request.outputId,
+            filePath: createRecordingFilePath('/tmp/edited.mp4'),
+            title: request.plan.title,
+            createdAt: request.createdAt,
+            durationMs: createDurationMs(request.plan.trimEndMs - request.plan.trimStartMs),
+            width: 1080,
+            height: 1920,
+            fileSizeBytes: 25_000,
+          }),
+          thumbnailPath: '/tmp/editor-poster.png',
+        };
+      },
+    };
+    const storedPosters: string[] = [];
+    const thumbnails: RecordingThumbnailPort = {
+      getDataUrl: async () => undefined,
+      remove: async () => undefined,
+      storeFromFile: async (_recording, sourcePath) => {
+        storedPosters.push(sourcePath);
+      },
+    };
+    const logger = {
+      debug: () => undefined,
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+    };
+    const exportEdit = new ExportEditedRecordingUseCase(
+      catalog,
+      sessions,
+      editor,
+      thumbnails,
+      new FakeClock(),
+      new FakeIds(),
+      logger,
+    );
+
+    const result = await exportEdit.execute({
+      recordingId: source.id,
+      title: 'Source – Square',
+      trimStartMs: 1_000,
+      trimEndMs: 8_000,
+      crop: { x: 0.21875, y: 0, width: 0.5625, height: 1 },
+      rotation: 90,
+      mutedRanges: [
+        { startMs: 2_000, endMs: 3_000 },
+        { startMs: 2_500, endMs: 4_000 },
+      ],
+      posterTimeMs: 5_000,
+    });
+
+    expect(source.filePath).toBe('/tmp/source.mp4');
+    expect(result).toMatchObject({ id: 'session-1', title: 'Source – Square' });
+    expect(received?.plan.mutedRanges).toEqual([{ startMs: 2_000, endMs: 4_000 }]);
+    expect(catalog.recordings.get(result.id)).toEqual(result);
+    expect(storedPosters).toEqual(['/tmp/editor-poster.png']);
   });
 });
 

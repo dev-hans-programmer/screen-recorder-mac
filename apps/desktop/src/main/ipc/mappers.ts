@@ -6,6 +6,7 @@ import {
   type AppPreferences,
   type AppPreferencesPatch,
   type RecordingRequest,
+  type RecordingEditPlanInput,
 } from '@screen-recorder/domain';
 import {
   IpcProtocolError,
@@ -17,6 +18,7 @@ import {
   type IpcError,
   type IpcEvent,
   type RecordingArtifactDto,
+  type RecordingEditRequestDto,
   type RecordingMetadataDto,
   type RecordingRequestDto,
   type RecordingSessionSnapshotDto,
@@ -79,6 +81,19 @@ export function toRecordingRequest(dto: RecordingRequestDto): RecordingRequest {
     showsCursor: dto.showsCursor,
     showsMouseClicks: dto.showsMouseClicks,
   });
+}
+
+export function toRecordingEditPlanInput(dto: RecordingEditRequestDto): RecordingEditPlanInput {
+  return {
+    recordingId: dto.recordingId,
+    title: dto.title,
+    trimStartMs: dto.trimStartMs,
+    trimEndMs: dto.trimEndMs,
+    crop: { ...dto.crop },
+    rotation: dto.rotation,
+    mutedRanges: dto.mutedRanges.map((range) => ({ ...range })),
+    posterTimeMs: dto.posterTimeMs,
+  };
 }
 
 export function toRecordingRequestDto(request: RecordingRequest): RecordingRequestDto {

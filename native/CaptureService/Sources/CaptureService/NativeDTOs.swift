@@ -207,3 +207,47 @@ struct NativeRecordingResult: Codable, Sendable, Equatable {
   let averageFileWriteBytesPerSecond: Double
   let peakFileWriteBytesPerSecond: Double
 }
+
+struct NormalizedCropPayload: Codable, Sendable, Equatable {
+  let x: Double
+  let y: Double
+  let width: Double
+  let height: Double
+}
+
+struct MuteRangePayload: Codable, Sendable, Equatable {
+  let startMs: Double
+  let endMs: Double
+}
+
+struct RecordingEditPayload: Codable, Sendable, Equatable {
+  let inputPath: String
+  let outputPath: String
+  let thumbnailPath: String
+  let profileId: String
+  let codec: String
+  let frameRate: Int
+  let hasSystemAudio: Bool
+  let hasMicrophone: Bool
+  let trimStartMs: Double
+  let trimEndMs: Double
+  let crop: NormalizedCropPayload
+  let rotation: Int
+  let mutedRanges: [MuteRangePayload]
+  let posterTimeMs: Double
+}
+
+struct NativeEditedRecordingResult: Codable, Sendable, Equatable {
+  let status: String
+  let filePath: String
+  let thumbnailPath: String?
+  let profileId: String
+  let codec: String
+  let width: Int
+  let height: Int
+  let frameRate: Int
+  let durationMs: Double
+  let fileSizeBytes: Int64
+  let hasSystemAudio: Bool
+  let hasMicrophone: Bool
+}

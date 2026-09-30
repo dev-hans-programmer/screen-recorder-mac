@@ -9,6 +9,7 @@ import { NativeServiceSupervisor } from '../src/main/infrastructure/native/nativ
 import {
   mapNativeSource,
   parseNativeCapabilities,
+  parseNativeEditedRecordingResult,
   parseNativePermissions,
   parseNativeSources,
   toCaptureCapabilities,
@@ -116,6 +117,41 @@ describe('native bridge infrastructure', () => {
     expect(() => supervisor.reserveRecording('session-2')).toThrowError(DomainError);
     supervisor.releaseRecording('session-1');
     expect(() => supervisor.reserveRecording('session-2')).not.toThrow();
+  });
+
+  it('keeps capture and editor exports mutually exclusive', () => {
+    const supervisor = new NativeServiceSupervisor({
+      executablePath: '/fake/CaptureService',
+      clientVersion: 'test',
+    });
+
+    supervisor.reserveEditor('edit-1');
+    expect(() => supervisor.reserveRecording('session-1')).toThrowError(DomainError);
+    expect(() => supervisor.reserveEditor('edit-2')).toThrowError(DomainError);
+    supervisor.releaseEditor('edit-1');
+    expect(() => supervisor.reserveRecording('session-1')).not.toThrow();
+  });
+
+  it('validates native edited recording metadata', () => {
+    expect(
+      parseNativeEditedRecordingResult({
+        status: 'completed',
+        filePath: '/tmp/edit.mp4',
+        thumbnailPath: '/tmp/poster.png',
+        profileId: 'balanced',
+        codec: 'hevc',
+        width: 1080,
+        height: 1920,
+        frameRate: 60,
+        durationMs: 5_000,
+        fileSizeBytes: 12_000,
+        hasSystemAudio: true,
+        hasMicrophone: false,
+      }),
+    ).toMatchObject({ width: 1080, thumbnailPath: '/tmp/poster.png' });
+    expect(() => parseNativeEditedRecordingResult({ status: 'completed' })).toThrowError(
+      DomainError,
+    );
   });
 
   it('orchestrates a complete start/pause/resume/stop flow without media IPC', async () => {

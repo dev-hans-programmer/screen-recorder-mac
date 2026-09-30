@@ -6,6 +6,7 @@ public enum CaptureServiceQualityChecks {
   public static func run() async throws {
     try await checkProtocolParsing()
     try checkConfigurationValidation()
+    try await checkEditorValidation()
     try await checkStateTransitions()
     try await checkWriterFinalization()
   }
@@ -75,6 +76,17 @@ public enum CaptureServiceQualityChecks {
     } catch let error as NativeServiceError where error.code == "INVALID_CONFIGURATION" {
       return
     }
+  }
+
+  private static func checkEditorValidation() async throws {
+    let service = CaptureService()
+    let response = await service.handleLine(
+      #"{"protocolVersion":1,"requestId":"invalid-edit","command":"exportRecording","payload":{"inputPath":"/tmp/source.mp4","outputPath":"/tmp/edit.mp4","thumbnailPath":"/tmp/poster.png","profileId":"balanced","codec":"hevc","frameRate":60,"hasSystemAudio":true,"hasMicrophone":false,"trimStartMs":0,"trimEndMs":1000,"crop":{"x":0.8,"y":0,"width":0.5,"height":1},"rotation":0,"mutedRanges":[],"posterTimeMs":0}}"#
+    )
+    try require(
+      response.error?.code == "INVALID_CONFIGURATION",
+      "An invalid editor crop was accepted."
+    )
   }
 
   private static func checkStateTransitions() async throws {

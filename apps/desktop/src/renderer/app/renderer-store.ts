@@ -8,13 +8,14 @@ import type {
   CaptureSourceDto,
   IpcEvent,
   RecordingArtifactDto,
+  RecordingEditRequestDto,
   RecordingMetadataDto,
   RecordingSessionSnapshotDto,
 } from '@screen-recorder/contracts';
 
 import type { ScreenRecorderApi } from '../../shared/screen-recorder-api';
 
-export type AppScreen = 'recorder' | 'library' | 'settings';
+export type AppScreen = 'recorder' | 'library' | 'editor' | 'settings';
 export type RecoveryAction =
   'open-screen-settings' | 'open-microphone-settings' | 'restart-application' | 'refresh-sources';
 export type Operation =
@@ -26,6 +27,7 @@ export type Operation =
   | 'resuming'
   | 'stopping'
   | 'library-action'
+  | 'exporting-edit'
   | 'selecting-output-directory'
   | 'saving-preferences'
   | 'exporting-diagnostics';
@@ -60,6 +62,7 @@ export interface RendererState {
   readonly permissions: CapturePermissionsDto | null;
   readonly preferences: AppPreferencesDto | null;
   readonly recordings: readonly RecordingMetadataDto[];
+  readonly editorRecordingId: string | null;
   readonly recordingOptions: RecordingOptions;
   readonly activeSession: RecordingSessionSnapshotDto | null;
   readonly recordingState: RecordingSessionSnapshotDto['state'] | 'idle';
@@ -79,6 +82,7 @@ const initialState: RendererState = {
   permissions: null,
   preferences: null,
   recordings: [],
+  editorRecordingId: null,
   recordingOptions: {
     profileId: 'balanced',
     resolution: 'source',
@@ -254,6 +258,45 @@ export class RendererStore {
 
   public getRecordingThumbnail(recordingId: string): Promise<string | null> {
     return this.api.getRecordingThumbnail(recordingId);
+  }
+
+  public getRecordingMediaUrl(recordingId: string): Promise<string> {
+    return this.api.getRecordingMediaUrl(recordingId);
+  }
+
+  public openEditor(recordingId: string): void {
+    const recording = this.state.recordings.find((candidate) => candidate.id === recordingId);
+    if (recording === undefined || recording.availability === 'missing') {
+      this.setState({ error: 'The recording is unavailable and cannot be edited.' });
+      return;
+    }
+    this.setState({ activeScreen: 'editor', editorRecordingId: recordingId, error: null });
+  }
+
+  public closeEditor(): void {
+    this.setState({ activeScreen: 'library', editorRecordingId: null, error: null });
+    void this.refreshRecordings();
+  }
+
+  public async exportEditedRecording(edit: RecordingEditRequestDto): Promise<boolean> {
+    this.setState({ operation: 'exporting-edit', error: null, notice: null });
+    try {
+      const recording = await this.api.exportEditedRecording(edit);
+      this.setState({
+        recordings: withRecording(this.state.recordings, recording),
+        editorRecordingId: null,
+        activeScreen: 'library',
+        operation: 'idle',
+        notice: 'Edited recording exported to your library.',
+      });
+      return true;
+    } catch (error: unknown) {
+      this.setState({
+        operation: 'idle',
+        error: errorMessage(error, 'The edited recording could not be exported.'),
+      });
+      return false;
+    }
   }
 
   public async renameRecording(recordingId: string, title: string): Promise<boolean> {

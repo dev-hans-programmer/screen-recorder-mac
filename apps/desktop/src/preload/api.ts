@@ -87,6 +87,10 @@ export function createScreenRecorderApi(
       sendCommand('library.list', {}) as Promise<readonly RecordingMetadataDto[]>,
     getRecordingThumbnail: (recordingId) =>
       sendCommand('library.thumbnail', { recordingId }) as Promise<string | null>,
+    getRecordingMediaUrl: (recordingId) =>
+      sendCommand('library.media-url', { recordingId }) as Promise<string>,
+    exportEditedRecording: (edit) =>
+      sendCommand('editor.export', { edit }) as Promise<RecordingMetadataDto>,
     renameRecording: (recordingId, title) =>
       sendCommand('library.rename', { recordingId, title }) as Promise<RecordingMetadataDto>,
     openRecording: async (recordingId) => {
