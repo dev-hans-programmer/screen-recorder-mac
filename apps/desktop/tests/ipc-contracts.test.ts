@@ -39,6 +39,25 @@ describe('IPC contracts', () => {
     expect(response.data?.width).toBe(400);
   });
 
+  it('validates the native recording-directory picker contract and cancellation', () => {
+    const request = parseIpcRequest({
+      protocolVersion,
+      requestId: 'directory-request',
+      command: 'preferences.choose-output-directory',
+      payload: {},
+    });
+    const response = parseIpcResponse('preferences.choose-output-directory', {
+      protocolVersion,
+      requestId: 'directory-request',
+      command: 'preferences.choose-output-directory',
+      ok: true,
+      data: null,
+    });
+
+    expect(request.command).toBe('preferences.choose-output-directory');
+    expect(response.data).toBeNull();
+  });
+
   it('rejects invalid commands before application services can receive them', () => {
     expect(() =>
       parseIpcRequest({

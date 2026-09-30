@@ -40,6 +40,7 @@ export interface ScreenRecorderApi {
   relaunchApplication(): Promise<void>;
   exportDiagnostics(): Promise<string | null>;
   getPreferences(): Promise<AppPreferencesDto>;
+  chooseOutputDirectory(): Promise<AppPreferencesDto | null>;
   updatePreferences(patch: AppPreferencesPatchDto): Promise<AppPreferencesDto>;
   onEvent(listener: (event: IpcEvent) => void): () => void;
   onShortcut(listener: (action: ShortcutAction) => void): () => void;

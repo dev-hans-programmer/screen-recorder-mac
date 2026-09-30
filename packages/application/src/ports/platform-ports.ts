@@ -33,6 +33,11 @@ export interface DiagnosticsReportPort {
   exportReport(recordings: readonly RecordingDiagnostics[]): Promise<string | undefined>;
 }
 
+/** Opens the platform-native folder chooser without exposing filesystem APIs to the renderer. */
+export interface RecordingDirectoryPickerPort {
+  selectDirectory(defaultPath: string): Promise<string | undefined>;
+}
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface Logger {

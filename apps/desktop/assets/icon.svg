@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="170" y1="100" x2="850" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#26345f" />
+      <stop offset="0.55" stop-color="#151d38" />
+      <stop offset="1" stop-color="#0b1020" />
+    </linearGradient>
+    <linearGradient id="screen" x1="250" y1="260" x2="780" y2="742" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a8b4ff" />
+      <stop offset="0.55" stop-color="#7b86ff" />
+      <stop offset="1" stop-color="#9a69ef" />
+    </linearGradient>
+    <radialGradient id="lens" cx="0" cy="0" r="1" gradientTransform="translate(590 479) rotate(132) scale(264)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff758b" />
+      <stop offset="0.52" stop-color="#ff4f72" />
+      <stop offset="1" stop-color="#d72862" />
+    </radialGradient>
+    <filter id="shadow" x="70" y="76" width="884" height="898" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="32" stdDeviation="38" flood-color="#050814" flood-opacity="0.52" />
+    </filter>
+    <filter id="glow" x="276" y="233" width="514" height="518" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="26" />
+    </filter>
+  </defs>
+
+  <!-- Transparent corners preserve the familiar macOS app-icon silhouette. -->
+  <g filter="url(#shadow)">
+    <rect x="118" y="106" width="788" height="788" rx="174" fill="url(#tile)" />
+    <rect x="125" y="113" width="774" height="774" rx="167" fill="none" stroke="#ffffff" stroke-opacity="0.13" stroke-width="14" />
+  </g>
+
+  <ellipse cx="533" cy="502" rx="230" ry="233" fill="#7888ff" fill-opacity="0.18" filter="url(#glow)" />
+
+  <!-- A display frame and recording lens combine the two core ideas in one simple mark. -->
+  <rect x="245" y="274" width="534" height="386" rx="80" fill="#10172c" stroke="url(#screen)" stroke-width="28" />
+  <path d="M412 751h200M512 658v93" fill="none" stroke="url(#screen)" stroke-linecap="round" stroke-width="32" />
+  <circle cx="512" cy="467" r="139" fill="#10172c" stroke="#202b50" stroke-width="22" />
+  <circle cx="512" cy="467" r="100" fill="url(#lens)" />
+  <circle cx="478" cy="429" r="24" fill="#ffffff" fill-opacity="0.26" />
+
+  <!-- A small capture sparkle keeps the mark aligned with the app's visual language. -->
+  <path d="m701 229 13 46 45 13-45 13-13 46-13-46-45-13 45-13 13-46Z" fill="#d7dcff" />
+  <path d="m773 335 7 24 24 7-24 7-7 24-7-24-24-7 24-7 7-24Z" fill="#a8b4ff" />
+</svg>

@@ -20,6 +20,10 @@ The persisted snapshot includes:
 - System, light, or dark theme.
 - First-run onboarding completion.
 
+The Storage section uses the native macOS folder picker. The selected directory crosses the
+context-isolated renderer boundary through a validated, purpose-built IPC command and is persisted
+by the application layer. Cancelling the picker leaves the existing recording location unchanged.
+
 ## First-run onboarding
 
 Onboarding explains why Screen Recording is required and why microphone access is optional. It

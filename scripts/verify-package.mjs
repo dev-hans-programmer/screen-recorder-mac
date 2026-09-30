@@ -27,11 +27,28 @@ const resources = path.join(appPath, 'Contents/Resources');
 const asarPath = path.join(resources, 'app.asar');
 const helperPath = path.join(resources, 'CaptureService');
 const executablePath = path.join(appPath, 'Contents/MacOS/Screen Recorder');
+const infoPlistPath = path.join(appPath, 'Contents/Info.plist');
 if (!existsSync(asarPath)) throw new Error('Packaged renderer/main ASAR is missing.');
 if (!existsSync(helperPath) || !statSync(helperPath).isFile()) {
   throw new Error('CaptureService is not packaged as an external resource.');
 }
 accessSync(helperPath, constants.X_OK);
+
+const iconNameResult = spawnSync(
+  '/usr/libexec/PlistBuddy',
+  ['-c', 'Print :CFBundleIconFile', infoPlistPath],
+  { encoding: 'utf8' },
+);
+if (iconNameResult.status !== 0) {
+  throw new Error(iconNameResult.stderr || 'The packaged app icon is not declared.');
+}
+const declaredIconName = iconNameResult.stdout.trim();
+const iconFileName =
+  path.extname(declaredIconName) === '' ? `${declaredIconName}.icns` : declaredIconName;
+const iconPath = path.join(resources, iconFileName);
+if (!existsSync(iconPath) || !statSync(iconPath).isFile()) {
+  throw new Error(`The packaged app icon is missing: ${iconFileName}.`);
+}
 
 function architecturesFor(binaryPath) {
   const result = spawnSync('lipo', ['-archs', binaryPath], { encoding: 'utf8' });
@@ -62,6 +79,7 @@ process.stdout.write(
       asarPresent: true,
       helperOutsideAsar: true,
       helperExecutable: true,
+      appIcon: iconFileName,
       appArchitectures,
       helperArchitectures,
       codeSignatureValid: true,

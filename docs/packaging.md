@@ -32,6 +32,8 @@ binary, packages a Universal 2 Electron app, and creates:
 
 The application code is stored in `app.asar`. The executable native helper is deliberately copied
 to `Contents/Resources/CaptureService` outside the ASAR so Electron can launch it directly.
+The production macOS icon is generated at all required resolutions in `apps/desktop/assets/icon.icns`
+and embedded into the application bundle by Electron Forge.
 
 ## Validate artifacts
 
@@ -41,9 +43,10 @@ node scripts/verify-package.mjs
 pnpm test:packaged:probe
 ```
 
-The checks verify artifact hashes, ASAR/helper placement, executable permissions, matching app and
-helper architectures, code-signature integrity, packaged renderer startup, and helper discovery.
-Use `pnpm test:packaged` on a Mac with Screen Recording permission to include a short real capture.
+The checks verify artifact hashes, app-icon and ASAR/helper placement, executable permissions,
+matching app and helper architectures, code-signature integrity, packaged renderer startup, and
+helper discovery. Use `pnpm test:packaged` on a Mac with Screen Recording permission to include a
+short real capture.
 
 ## Signing modes
 

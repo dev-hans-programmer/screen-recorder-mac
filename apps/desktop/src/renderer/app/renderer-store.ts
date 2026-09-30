@@ -26,6 +26,7 @@ export type Operation =
   | 'resuming'
   | 'stopping'
   | 'library-action'
+  | 'selecting-output-directory'
   | 'saving-preferences'
   | 'exporting-diagnostics';
 
@@ -677,6 +678,32 @@ export class RendererStore {
       this.setState({
         operation: 'idle',
         error: errorMessage(error, 'Preferences could not be saved.'),
+      });
+    }
+  }
+
+  public async chooseOutputDirectory(): Promise<void> {
+    this.setState({ operation: 'selecting-output-directory', error: null, notice: null });
+
+    try {
+      const preferences = await this.api.chooseOutputDirectory();
+      this.setState({
+        ...(preferences === null
+          ? {}
+          : {
+              preferences,
+              recordingOptions: this.optionsFromPreferences(
+                preferences,
+                this.state.recordingOptions,
+              ),
+            }),
+        operation: 'idle',
+        ...(preferences === null ? {} : { notice: 'Recording location updated.' }),
+      });
+    } catch (error: unknown) {
+      this.setState({
+        operation: 'idle',
+        error: errorMessage(error, 'The recording location could not be changed.'),
       });
     }
   }

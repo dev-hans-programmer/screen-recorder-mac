@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ChooseRecordingDirectoryUseCase,
   PauseRecordingUseCase,
   RecoverInterruptedRecordingUseCase,
   ResumeRecordingUseCase,
@@ -489,5 +490,31 @@ describe('preference application use case', () => {
 
     expect(result.defaultFrameRate).toBe(30);
     expect(current.defaultFrameRate).toBe(30);
+  });
+
+  it('chooses and persists a recording directory while preserving cancellation', async () => {
+    let current: AppPreferences = defaultAppPreferences;
+    const preferences = {
+      get: () => Promise.resolve(current),
+      save: (updated: AppPreferences) => {
+        current = updated;
+        return Promise.resolve();
+      },
+    };
+    const selectedPaths = ['/Users/tester/Movies/Captures', undefined];
+    const picker = {
+      selectDirectory: () => Promise.resolve(selectedPaths.shift()),
+    };
+    const chooseDirectory = new ChooseRecordingDirectoryUseCase(
+      preferences,
+      picker,
+      () => '/Users/tester/Movies/Screen Recorder',
+    );
+
+    await expect(chooseDirectory.execute()).resolves.toMatchObject({
+      outputDirectory: '/Users/tester/Movies/Captures',
+    });
+    await expect(chooseDirectory.execute()).resolves.toBeUndefined();
+    expect(current.outputDirectory).toBe('/Users/tester/Movies/Captures');
   });
 });

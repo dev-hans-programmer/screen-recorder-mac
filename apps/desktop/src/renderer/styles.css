@@ -1751,19 +1751,35 @@ select:focus-visible {
   max-width: 620px;
 }
 
-.input-with-icon {
+.directory-picker {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
 }
 
-.input-with-icon svg {
+.directory-picker > svg {
   position: absolute;
   top: 10px;
   left: 10px;
   color: var(--text-faint);
+  pointer-events: none;
 }
 
-.input-with-icon input {
+.directory-picker input {
+  min-width: 0;
   padding-left: 33px;
+  overflow: hidden;
+  color: var(--text-soft);
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.field-hint {
+  color: var(--text-faint);
+  font-size: 0.65rem;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .region-selector-root {
@@ -1983,6 +1999,14 @@ select:focus-visible {
 
   .recording-actions .button {
     flex: 1;
+  }
+
+  .directory-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .directory-picker .button {
+    width: 100%;
   }
 
   .library-header-actions {

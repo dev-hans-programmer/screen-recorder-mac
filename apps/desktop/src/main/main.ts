@@ -11,6 +11,7 @@ import { createLifecycleManager, type LifecycleManager } from './infrastructure/
 import { resolveCaptureServicePath } from './infrastructure/native/native-service-path';
 import { DesktopControls } from './infrastructure/desktop-controls';
 import { ElectronDiagnosticsReport } from './infrastructure/electron-diagnostics-report';
+import { ElectronRecordingDirectoryPicker } from './infrastructure/electron-recording-directory-picker';
 import { StructuredFileLogger } from './infrastructure/logger';
 import {
   runPackagedSmokeProbe,
@@ -92,6 +93,9 @@ function createMainWindow(): void {
       onWarning: (message) => logger.warn(message),
     });
     const diagnosticsReport = new ElectronDiagnosticsReport({ logger });
+    const recordingDirectoryPicker = new ElectronRecordingDirectoryPicker({
+      getParentWindow: () => mainWindow,
+    });
     applicationContainer = createApplicationContainer(
       events,
       {
@@ -112,6 +116,7 @@ function createMainWindow(): void {
         preferencesFilePath: path.join(app.getPath('userData'), 'preferences.json'),
         diagnosticsFilePath: path.join(app.getPath('userData'), 'diagnostics', 'recordings.json'),
         diagnosticsReport,
+        recordingDirectoryPicker,
       },
       logger,
     );

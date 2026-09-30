@@ -1001,7 +1001,6 @@ export function SettingsView({ store }: { readonly store: RendererStore }) {
   const preferences = useRendererSelector(store, (state) => state.preferences);
   const permissions = useRendererSelector(store, (state) => state.permissions);
   const operation = useRendererSelector(store, (state) => state.operation);
-  const [outputDirectory, setOutputDirectory] = useState(preferences?.outputDirectory ?? '');
   const [startStopShortcut, setStartStopShortcut] = useState(
     preferences?.shortcuts.startStop ?? '',
   );
@@ -1010,12 +1009,6 @@ export function SettingsView({ store }: { readonly store: RendererStore }) {
   );
 
   if (preferences === null) return <LoadingState label="Loading settings" />;
-
-  const saveOutputDirectory = () => {
-    if (outputDirectory.trim().length > 0 && outputDirectory !== preferences.outputDirectory) {
-      void store.updatePreferences({ outputDirectory: outputDirectory.trim() });
-    }
-  };
 
   return (
     <div className="settings-layout">
@@ -1209,21 +1202,30 @@ export function SettingsView({ store }: { readonly store: RendererStore }) {
         <div className="settings-section-heading">
           <div>
             <h3>Storage</h3>
-            <p>Completed recordings are written here. Use an absolute path.</p>
+            <p>Choose where completed recordings are saved on this Mac.</p>
           </div>
         </div>
-        <label className="field field-wide">
-          <span>Output directory</span>
-          <div className="input-with-icon">
+        <div className="field field-wide">
+          <span>Recording location</span>
+          <div className="directory-picker">
             <Icon name="folder" size={16} />
             <input
-              value={outputDirectory}
+              aria-label="Selected recording location"
               placeholder="Default Movies / Screen Recorder"
-              onBlur={saveOutputDirectory}
-              onChange={(event) => setOutputDirectory(event.target.value)}
+              readOnly
+              title={preferences.outputDirectory || 'Movies / Screen Recorder (default)'}
+              value={preferences.outputDirectory}
             />
+            <Button
+              disabled={operation !== 'idle'}
+              variant="secondary"
+              onClick={() => void store.chooseOutputDirectory()}
+            >
+              {operation === 'selecting-output-directory' ? 'Choosing…' : 'Choose Folder'}
+            </Button>
           </div>
-        </label>
+          <span className="field-hint">A new folder can also be created in the picker.</span>
+        </div>
       </section>
       <section className="settings-section">
         <div className="settings-section-heading">

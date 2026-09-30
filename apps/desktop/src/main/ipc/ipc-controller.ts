@@ -235,6 +235,13 @@ async function dispatchRequest(
         request,
         toPreferencesDto(await container.useCases.getPreferences.execute()),
       );
+    case 'preferences.choose-output-directory': {
+      const preferences = await container.useCases.chooseRecordingDirectory.execute();
+      if (preferences === undefined) return successResponse(request, null);
+      const preferencesDto = toPreferencesDto(preferences);
+      onPreferencesUpdated?.(preferencesDto);
+      return successResponse(request, preferencesDto);
+    }
     case 'preferences.update': {
       const preferences = toPreferencesDto(
         await container.useCases.updatePreferences.execute(

@@ -251,6 +251,7 @@ export const ipcRequestSchema = z.discriminatedUnion('command', [
   requestSchema('app.relaunch', emptyPayloadSchema),
   requestSchema('diagnostics.export', emptyPayloadSchema),
   requestSchema('preferences.get', emptyPayloadSchema),
+  requestSchema('preferences.choose-output-directory', emptyPayloadSchema),
   requestSchema('preferences.update', z.object({ patch: appPreferencesPatchSchema }).strict()),
 ]);
 
@@ -291,6 +292,7 @@ const responseDataSchemas = {
   'app.relaunch': z.null(),
   'diagnostics.export': z.string().min(1).nullable(),
   'preferences.get': appPreferencesSchema,
+  'preferences.choose-output-directory': appPreferencesSchema.nullable(),
   'preferences.update': appPreferencesSchema,
 } as const;
 

@@ -78,6 +78,7 @@ const config: ForgeConfig = {
     name: 'Screen Recorder',
     executableName: 'Screen Recorder',
     appBundleId: 'com.screenrecorder.app',
+    icon: path.resolve(__dirname, 'assets/icon'),
     extraResource: [nativeServiceBinary],
     afterExtract: [
       (buildPath, _electronVersion, platform, _architecture, callback) => {

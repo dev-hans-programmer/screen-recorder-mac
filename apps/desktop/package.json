@@ -1,7 +1,7 @@
 {
   "name": "@screen-recorder/desktop",
   "productName": "Screen Recorder",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A native-feeling macOS screen recorder.",
   "main": ".vite/build/main.js",
   "author": "Screen Recorder",

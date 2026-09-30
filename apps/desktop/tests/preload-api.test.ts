@@ -135,6 +135,41 @@ describe('secure preload API', () => {
     ]);
   });
 
+  it('exposes a purpose-built recording-directory picker command', async () => {
+    const calls: unknown[] = [];
+    const api = createScreenRecorderApi(
+      {
+        invoke: async (channel, request) => {
+          calls.push({ channel, request });
+          const typedRequest = request as { readonly requestId: string; readonly command: string };
+          return {
+            protocolVersion,
+            requestId: typedRequest.requestId,
+            command: typedRequest.command,
+            ok: true,
+            data: null,
+          };
+        },
+        on: () => undefined,
+        removeListener: () => undefined,
+      },
+      () => 'directory-request',
+    );
+
+    await expect(api.chooseOutputDirectory()).resolves.toBeNull();
+    expect(calls).toEqual([
+      {
+        channel: ipcChannels.command,
+        request: {
+          protocolVersion,
+          requestId: 'directory-request',
+          command: 'preferences.choose-output-directory',
+          payload: {},
+        },
+      },
+    ]);
+  });
+
   it('keeps region selection and shortcut channels purpose-built', async () => {
     const calls: unknown[] = [];
     const sent: unknown[] = [];

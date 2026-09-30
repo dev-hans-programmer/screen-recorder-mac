@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import {
   CheckCapturePermissionsUseCase,
+  ChooseRecordingDirectoryUseCase,
   DeleteRecordingUseCase,
   ExportDiagnosticsUseCase,
   GetRecordingThumbnailUseCase,
@@ -27,6 +28,7 @@ import {
   type DiagnosticsReportPort,
   type IdGenerator,
   type Logger,
+  type RecordingDirectoryPickerPort,
   type RecordingEnginePort,
 } from '@screen-recorder/application';
 
@@ -60,6 +62,7 @@ export interface ApplicationContainer {
   readonly engine: RecordingEnginePort;
   readonly useCases: {
     readonly checkCapturePermissions: CheckCapturePermissionsUseCase;
+    readonly chooseRecordingDirectory: ChooseRecordingDirectoryUseCase;
     readonly deleteRecording: DeleteRecordingUseCase;
     readonly exportDiagnostics: ExportDiagnosticsUseCase;
     readonly getPreferences: GetPreferencesUseCase;
@@ -92,6 +95,7 @@ export interface ApplicationContainerOptions {
   readonly preferencesFilePath: string;
   readonly diagnosticsFilePath: string;
   readonly diagnosticsReport: DiagnosticsReportPort;
+  readonly recordingDirectoryPicker: RecordingDirectoryPickerPort;
 }
 
 export function createApplicationContainer(
@@ -151,6 +155,11 @@ export function createApplicationContainer(
     engine,
     useCases: {
       checkCapturePermissions: new CheckCapturePermissionsUseCase(capture),
+      chooseRecordingDirectory: new ChooseRecordingDirectoryUseCase(
+        preferences,
+        options.recordingDirectoryPicker,
+        options.defaultOutputDirectory,
+      ),
       deleteRecording: new DeleteRecordingUseCase(catalog, files, thumbnails),
       exportDiagnostics: new ExportDiagnosticsUseCase(diagnostics, options.diagnosticsReport),
       getPreferences: new GetPreferencesUseCase(preferences),

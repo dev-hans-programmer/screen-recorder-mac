@@ -138,6 +138,13 @@ function createApi() {
     relaunchApplication: vi.fn(async () => undefined),
     exportDiagnostics: vi.fn(async () => '/tmp/diagnostics.json'),
     getPreferences: vi.fn(async () => currentPreferences),
+    chooseOutputDirectory: vi.fn(async () => {
+      currentPreferences = {
+        ...currentPreferences,
+        outputDirectory: '/Users/tester/Movies/Captures',
+      };
+      return currentPreferences;
+    }),
     updatePreferences: vi.fn(async (patch) => {
       currentPreferences = {
         ...currentPreferences,
@@ -323,6 +330,18 @@ describe('RendererStore', () => {
     expect(fixture.api.exportDiagnostics).toHaveBeenCalledOnce();
     expect(store.getState().notice).toContain('exported successfully');
     expect(store.getState().operation).toBe('idle');
+  });
+
+  it('updates the recording location selected by the native folder picker', async () => {
+    const fixture = createApi();
+    const store = new RendererStore(fixture.api);
+    await store.initialize();
+
+    await store.chooseOutputDirectory();
+
+    expect(fixture.api.chooseOutputDirectory).toHaveBeenCalledOnce();
+    expect(store.getState().preferences?.outputDirectory).toBe('/Users/tester/Movies/Captures');
+    expect(store.getState().notice).toBe('Recording location updated.');
   });
 
   it('blocks capture and offers an app restart when macOS requires one', async () => {

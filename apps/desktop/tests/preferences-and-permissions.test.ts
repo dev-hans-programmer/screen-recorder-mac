@@ -5,13 +5,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const shellMocks = vi.hoisted(() => ({
   openExternal: vi.fn(async () => undefined),
+  showOpenDialog: vi.fn(),
 }));
 
-vi.mock('electron', () => ({ shell: shellMocks }));
+vi.mock('electron', () => ({
+  dialog: { showOpenDialog: shellMocks.showOpenDialog },
+  shell: shellMocks,
+}));
 
 import { defaultAppPreferences, updateAppPreferences } from '@screen-recorder/domain';
 
 import { JsonPreferencesRepository } from '../src/main/infrastructure/json-preferences-repository';
+import { ElectronRecordingDirectoryPicker } from '../src/main/infrastructure/electron-recording-directory-picker';
 import { MacOsSystemSettings } from '../src/main/infrastructure/macos-system-settings';
 
 const temporaryDirectories: string[] = [];
@@ -95,5 +100,32 @@ describe('macOS permission recovery', () => {
       2,
       'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
     );
+  });
+});
+
+describe('recording directory picker', () => {
+  it('opens a native directory-only dialog and returns the selected folder', async () => {
+    shellMocks.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ['/Users/tester/Movies/Captures'],
+    });
+    const picker = new ElectronRecordingDirectoryPicker({ getParentWindow: () => null });
+
+    await expect(picker.selectDirectory('/Users/tester/Movies')).resolves.toBe(
+      '/Users/tester/Movies/Captures',
+    );
+    expect(shellMocks.showOpenDialog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultPath: '/Users/tester/Movies',
+        properties: ['openDirectory', 'createDirectory'],
+      }),
+    );
+  });
+
+  it('returns undefined when folder selection is cancelled', async () => {
+    shellMocks.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    const picker = new ElectronRecordingDirectoryPicker({ getParentWindow: () => null });
+
+    await expect(picker.selectDirectory('/Users/tester/Movies')).resolves.toBeUndefined();
   });
 });
