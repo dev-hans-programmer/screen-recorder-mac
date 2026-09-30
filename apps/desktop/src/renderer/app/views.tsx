@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
   AppPreferencesDto,
+  CapturePermissionsDto,
   CaptureSourceDto,
   RecordingMetadataDto,
 } from '@screen-recorder/contracts';
@@ -72,6 +73,198 @@ function qualityLabel(
   return `${profile} · ${resolution} · ${preferences.defaultFrameRate} FPS`;
 }
 
+function permissionLabel(state: CapturePermissionsDto['screenRecording']): string {
+  if (state === 'not-determined') return 'Not requested';
+  return state[0].toUpperCase() + state.slice(1);
+}
+
+export function OnboardingView({ store }: { readonly store: RendererStore }) {
+  const permissions = useRendererSelector(store, (state) => state.permissions);
+  const operation = useRendererSelector(store, (state) => state.operation);
+  const screenGranted = permissions?.screenRecording === 'granted';
+  const restartRequired = permissions?.screenRecordingRequiresRestart === true;
+  const ready = screenGranted && !restartRequired;
+
+  return (
+    <div className="onboarding-layout">
+      <section className="onboarding-card">
+        <div className="onboarding-mark">
+          <Icon name="sparkles" size={25} />
+        </div>
+        <div className="section-eyebrow">
+          <span className="eyebrow-line" /> First-time setup
+        </div>
+        <h2>Beautiful captures start with two clear choices.</h2>
+        <p className="onboarding-lead">
+          Capture records and encodes locally on this Mac. Screen Recording is required; microphone
+          access is optional and only used when you enable it.
+        </p>
+
+        <div className="permission-setup-list">
+          <div className="permission-setup-row">
+            <span className="permission-setup-icon">
+              <Icon name="monitor" />
+            </span>
+            <div>
+              <strong>Screen Recording</strong>
+              <p>Allows macOS to provide the display or window you choose.</p>
+            </div>
+            <StatusBadge tone={ready ? 'success' : restartRequired ? 'warning' : 'neutral'}>
+              {restartRequired
+                ? 'Restart required'
+                : permissionLabel(permissions?.screenRecording ?? 'not-determined')}
+            </StatusBadge>
+            <div className="permission-setup-actions">
+              {restartRequired ? (
+                <Button
+                  icon="activity"
+                  variant="primary"
+                  onClick={() => void store.relaunchApplication()}
+                >
+                  Restart Capture
+                </Button>
+              ) : permissions?.screenRecording === 'denied' ||
+                permissions?.screenRecording === 'restricted' ? (
+                <Button
+                  icon="settings"
+                  variant="secondary"
+                  onClick={() => void store.openPermissionSettings('screen-recording')}
+                >
+                  Open System Settings
+                </Button>
+              ) : screenGranted ? null : (
+                <Button
+                  disabled={operation !== 'idle'}
+                  icon="activity"
+                  variant="primary"
+                  onClick={() => void store.requestPermissions(false)}
+                >
+                  Allow Screen Recording
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="permission-setup-row">
+            <span className="permission-setup-icon">
+              <Icon name="mic" />
+            </span>
+            <div>
+              <strong>Microphone</strong>
+              <p>Optional. Capture never enables your microphone without your selection.</p>
+            </div>
+            <StatusBadge tone={permissions?.microphone === 'granted' ? 'success' : 'neutral'}>
+              {permissionLabel(permissions?.microphone ?? 'not-determined')}
+            </StatusBadge>
+            <div className="permission-setup-actions">
+              {permissions?.microphone === 'denied' || permissions?.microphone === 'restricted' ? (
+                <Button
+                  icon="settings"
+                  variant="secondary"
+                  onClick={() => void store.openPermissionSettings('microphone')}
+                >
+                  Open System Settings
+                </Button>
+              ) : permissions?.microphone === 'granted' ? null : (
+                <Button
+                  disabled={operation !== 'idle'}
+                  icon="mic"
+                  variant="secondary"
+                  onClick={() => void store.requestPermissions(true)}
+                >
+                  Allow microphone
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="onboarding-actions">
+          <Button variant="ghost" onClick={() => void store.completeOnboarding()}>
+            Set up later
+          </Button>
+          <Button
+            disabled={!ready || operation !== 'idle'}
+            icon="chevron-right"
+            variant="primary"
+            onClick={() => void store.completeOnboarding()}
+          >
+            Continue to recorder
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PermissionRecoveryPanel({ store }: { readonly store: RendererStore }) {
+  const permissions = useRendererSelector(store, (state) => state.permissions);
+  const microphoneRequested = useRendererSelector(
+    store,
+    (state) => state.recordingOptions.microphone,
+  );
+  const operation = useRendererSelector(store, (state) => state.operation);
+  if (permissions === null) return null;
+
+  const restartRequired = permissions.screenRecordingRequiresRestart;
+  const screenMissing = permissions.screenRecording !== 'granted';
+  const microphoneMissing = microphoneRequested && permissions.microphone !== 'granted';
+  if (!restartRequired && !screenMissing && !microphoneMissing) return null;
+
+  const microphoneIssue = !restartRequired && !screenMissing && microphoneMissing;
+  const denied = microphoneIssue
+    ? permissions.microphone === 'denied' || permissions.microphone === 'restricted'
+    : permissions.screenRecording === 'denied' || permissions.screenRecording === 'restricted';
+
+  return (
+    <section className="permission-recovery-card">
+      <span className="permission-setup-icon">
+        <Icon name={microphoneIssue ? 'mic' : 'monitor'} />
+      </span>
+      <div>
+        <strong>
+          {restartRequired
+            ? 'Restart required to activate Screen Recording'
+            : microphoneIssue
+              ? 'Microphone access needs attention'
+              : 'Screen Recording access is required'}
+        </strong>
+        <p>
+          {restartRequired
+            ? 'macOS granted access, but the capture process must restart before it can use it.'
+            : denied
+              ? 'Open System Settings, enable access for Capture, then return here.'
+              : 'macOS will show a system prompt. Capture only requests the access shown here.'}
+        </p>
+      </div>
+      {restartRequired ? (
+        <Button icon="activity" variant="primary" onClick={() => void store.relaunchApplication()}>
+          Restart
+        </Button>
+      ) : denied ? (
+        <Button
+          icon="settings"
+          variant="secondary"
+          onClick={() =>
+            void store.openPermissionSettings(microphoneIssue ? 'microphone' : 'screen-recording')
+          }
+        >
+          Open Settings
+        </Button>
+      ) : (
+        <Button
+          disabled={operation !== 'idle'}
+          icon="activity"
+          variant="primary"
+          onClick={() => void store.requestPermissions(microphoneIssue)}
+        >
+          Allow access
+        </Button>
+      )}
+    </section>
+  );
+}
+
 export function RecorderView({ store }: { readonly store: RendererStore }) {
   const initialized = useRendererSelector(store, (state) => state.initialized);
   const sources = useRendererSelector(store, (state) => state.sources);
@@ -122,9 +315,13 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
 
   if (!initialized) return <LoadingState label="Preparing your workspace" />;
 
-  const permissionGranted = permissions?.screenRecording === 'granted';
+  const permissionGranted =
+    permissions?.screenRecording === 'granted' &&
+    permissions.screenRecordingRequiresRestart === false;
   const selectedSource = sources.find((source) => source.id === selectedSourceId);
-  const canStart = selectedSource !== undefined && permissionGranted && operation === 'idle';
+  const microphoneReady = !recordingOptions.microphone || permissions?.microphone === 'granted';
+  const canStart =
+    selectedSource !== undefined && permissionGranted && microphoneReady && operation === 'idle';
   const wallClockDuration =
     activeSession?.startedAt === null || activeSession?.startedAt === undefined
       ? 0
@@ -161,6 +358,8 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
           <span className="orb-ring orb-ring-two" />
         </div>
       </section>
+
+      {!recording && <PermissionRecoveryPanel store={store} />}
 
       {recording && activeSession !== null ? (
         <section className="active-recording-card" aria-live="polite">
@@ -398,7 +597,15 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
               </span>
             </div>
           </div>
-          {permissionGranted ? (
+          {permissions?.screenRecordingRequiresRestart === true ? (
+            <Button
+              icon="activity"
+              variant="primary"
+              onClick={() => void store.relaunchApplication()}
+            >
+              Restart Capture
+            </Button>
+          ) : permissionGranted ? (
             <Button
               disabled={!canStart}
               icon="circle"
@@ -764,6 +971,7 @@ const themeOptions = [
 
 export function SettingsView({ store }: { readonly store: RendererStore }) {
   const preferences = useRendererSelector(store, (state) => state.preferences);
+  const permissions = useRendererSelector(store, (state) => state.permissions);
   const operation = useRendererSelector(store, (state) => state.operation);
   const [outputDirectory, setOutputDirectory] = useState(preferences?.outputDirectory ?? '');
   const [startStopShortcut, setStartStopShortcut] = useState(
@@ -790,6 +998,81 @@ export function SettingsView({ store }: { readonly store: RendererStore }) {
         <h2>Make Capture feel like yours.</h2>
         <p>Quality defaults and accessibility choices are saved locally on this Mac.</p>
       </div>
+      <section className="settings-section">
+        <div className="settings-section-heading">
+          <div>
+            <h3>Privacy permissions</h3>
+            <p>Review access or recover quickly after a permission is changed.</p>
+          </div>
+          <Button icon="activity" variant="ghost" onClick={() => void store.refreshPermissions()}>
+            Check again
+          </Button>
+        </div>
+        <div className="settings-permissions">
+          <div className="settings-permission-row">
+            <span className="permission-setup-icon">
+              <Icon name="monitor" />
+            </span>
+            <div>
+              <strong>Screen Recording</strong>
+              <p>Required for display, window, application, and region capture.</p>
+            </div>
+            <StatusBadge
+              tone={
+                permissions?.screenRecordingRequiresRestart === true
+                  ? 'warning'
+                  : permissions?.screenRecording === 'granted'
+                    ? 'success'
+                    : 'danger'
+              }
+            >
+              {permissions?.screenRecordingRequiresRestart === true
+                ? 'Restart required'
+                : permissionLabel(permissions?.screenRecording ?? 'not-determined')}
+            </StatusBadge>
+            {permissions?.screenRecordingRequiresRestart === true ? (
+              <Button variant="secondary" onClick={() => void store.relaunchApplication()}>
+                Restart
+              </Button>
+            ) : permissions?.screenRecording === 'granted' ? null : (
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  permissions?.screenRecording === 'not-determined'
+                    ? void store.requestPermissions(false)
+                    : void store.openPermissionSettings('screen-recording')
+                }
+              >
+                {permissions?.screenRecording === 'not-determined' ? 'Request' : 'Open Settings'}
+              </Button>
+            )}
+          </div>
+          <div className="settings-permission-row">
+            <span className="permission-setup-icon">
+              <Icon name="mic" />
+            </span>
+            <div>
+              <strong>Microphone</strong>
+              <p>Optional and only active when microphone capture is selected.</p>
+            </div>
+            <StatusBadge tone={permissions?.microphone === 'granted' ? 'success' : 'neutral'}>
+              {permissionLabel(permissions?.microphone ?? 'not-determined')}
+            </StatusBadge>
+            {permissions?.microphone === 'granted' ? null : (
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  permissions?.microphone === 'not-determined'
+                    ? void store.requestPermissions(true)
+                    : void store.openPermissionSettings('microphone')
+                }
+              >
+                {permissions?.microphone === 'not-determined' ? 'Request' : 'Open Settings'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </section>
       <section className="settings-section">
         <div className="settings-section-heading">
           <div>

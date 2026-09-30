@@ -78,6 +78,7 @@ export function registerIpcController(
   container: ApplicationContainer,
   regionSelection?: RegionSelectionManager,
   onPreferencesUpdated?: (preferences: AppPreferencesDto) => void,
+  onRelaunchRequested?: () => Promise<void>,
 ): void {
   ipcMain.handle(ipcChannels.command, async (event, rawRequest: unknown) => {
     const requestId = getRequestId(rawRequest);
@@ -105,7 +106,13 @@ export function registerIpcController(
     }
 
     try {
-      return await dispatchRequest(request, container, regionSelection, onPreferencesUpdated);
+      return await dispatchRequest(
+        request,
+        container,
+        regionSelection,
+        onPreferencesUpdated,
+        onRelaunchRequested,
+      );
     } catch (error) {
       container.logger.error('IPC command failed.', { command: request.command });
       return failureResponse(request.requestId, request.command, error);
@@ -118,6 +125,7 @@ async function dispatchRequest(
   container: ApplicationContainer,
   regionSelection?: RegionSelectionManager,
   onPreferencesUpdated?: (preferences: AppPreferencesDto) => void,
+  onRelaunchRequested?: () => Promise<void>,
 ): Promise<Record<string, unknown>> {
   switch (request.command) {
     case 'capture.list-sources':
@@ -202,6 +210,18 @@ async function dispatchRequest(
       return successResponse(request, null);
     case 'library.open-folder':
       await container.useCases.openRecordingsFolder.execute();
+      return successResponse(request, null);
+    case 'system.open-permission-settings':
+      await container.useCases.openPermissionSettings.execute(request.payload.target);
+      return successResponse(request, null);
+    case 'app.relaunch':
+      if (onRelaunchRequested === undefined)
+        throw new Error('Application relaunch is unavailable.');
+      setTimeout(() => {
+        void onRelaunchRequested().catch(() => {
+          container.logger.error('Application relaunch failed.');
+        });
+      }, 100);
       return successResponse(request, null);
     case 'preferences.get':
       return successResponse(

@@ -111,8 +111,12 @@ actor CaptureService {
         throw NativeServiceError.invalidConfiguration("Capture must be configured before it starts.")
       }
       let currentPermissions = permissions.inspect()
-      guard currentPermissions.screenRecording == .granted else {
-        throw NativeServiceError.permissionDenied("Screen Recording permission is required before capture starts.")
+      guard currentPermissions.screenRecording == .granted,
+            !currentPermissions.screenRecordingRequiresRestart else {
+        let message = currentPermissions.screenRecordingRequiresRestart
+          ? "Restart Screen Recorder before starting capture."
+          : "Screen Recording permission is required before capture starts."
+        throw NativeServiceError.permissionDenied(message)
       }
       if configuration.microphone, currentPermissions.microphone != .granted {
         throw NativeServiceError.permissionDenied("Microphone permission is required for microphone capture.")

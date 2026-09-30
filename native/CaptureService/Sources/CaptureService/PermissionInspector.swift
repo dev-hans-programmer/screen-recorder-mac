@@ -20,19 +20,37 @@ final class PermissionInspector: @unchecked Sendable {
   private let lock = NSLock()
   private var screenPermissionWasRequested: Bool
   private let screenPermissionKey = "CaptureService.screenPermissionWasRequested"
+  private let screenPermissionGrantedAtLaunch: Bool
+  private var screenPermissionWasRevokedAfterLaunch = false
 
   init() {
     screenPermissionWasRequested = UserDefaults.standard.bool(forKey: screenPermissionKey)
+#if canImport(CoreGraphics)
+    screenPermissionGrantedAtLaunch = CGPreflightScreenCaptureAccess()
+#else
+    screenPermissionGrantedAtLaunch = false
+#endif
   }
 
   func inspect() -> NativePermissions {
     lock.lock()
     let wasRequested = screenPermissionWasRequested
     lock.unlock()
+    let screenRecording = screenRecordingState(wasRequested: wasRequested)
+
+    lock.lock()
+    if screenPermissionGrantedAtLaunch, screenRecording != .granted {
+      screenPermissionWasRevokedAfterLaunch = true
+    }
+    let requiresRestart = screenRecording == .granted &&
+      (!screenPermissionGrantedAtLaunch || screenPermissionWasRevokedAfterLaunch)
+    lock.unlock()
 
     return NativePermissions(
-      screenRecording: screenRecordingState(wasRequested: wasRequested),
-      microphone: microphoneState()
+      screenRecording: screenRecording,
+      microphone: microphoneState(),
+      // ScreenCaptureKit may not see newly granted or re-granted TCC access until process restart.
+      screenRecordingRequiresRestart: requiresRestart
     )
   }
 

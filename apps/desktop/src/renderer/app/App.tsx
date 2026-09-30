@@ -2,8 +2,8 @@ import { useEffect, type ReactElement } from 'react';
 
 import { appMetadata } from '../../shared/app-metadata';
 import { Button, Sidebar, Tooltip } from './components';
-import { getRendererStore, useRendererSelector } from './renderer-store';
-import { LibraryView, RecorderView, SettingsView } from './views';
+import { getRendererStore, useRendererSelector, type RecoveryAction } from './renderer-store';
+import { LibraryView, OnboardingView, RecorderView, SettingsView } from './views';
 
 const screenTitles = {
   recorder: 'Recorder',
@@ -11,15 +11,28 @@ const screenTitles = {
   settings: 'Settings',
 } as const;
 
+const recoveryLabels: Readonly<Record<RecoveryAction, string>> = {
+  'open-screen-settings': 'Open System Settings',
+  'open-microphone-settings': 'Open System Settings',
+  'restart-application': 'Restart Capture',
+  'refresh-sources': 'Refresh sources',
+};
+
 export function App(): ReactElement {
   const store = getRendererStore();
   const activeScreen = useRendererSelector(store, (state) => state.activeScreen);
   const recordingState = useRendererSelector(store, (state) => state.recordingState);
   const recordingCount = useRendererSelector(store, (state) => state.recordings.length);
   const operation = useRendererSelector(store, (state) => state.operation);
+  const initialized = useRendererSelector(store, (state) => state.initialized);
   const theme = useRendererSelector(store, (state) => state.preferences?.theme ?? 'system');
+  const onboarding = useRendererSelector(
+    store,
+    (state) => state.preferences?.onboardingCompleted === false,
+  );
   const error = useRendererSelector(store, (state) => state.error);
   const notice = useRendererSelector(store, (state) => state.notice);
+  const recoveryAction = useRendererSelector(store, (state) => state.recoveryAction);
 
   useEffect(() => {
     void store.initialize();
@@ -28,6 +41,21 @@ export function App(): ReactElement {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    if (!initialized) return undefined;
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void store.refreshPermissions(true);
+    };
+    const interval = window.setInterval(refresh, 5_000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [initialized, store]);
 
   return (
     <div className="app-shell" data-theme={theme}>
@@ -48,7 +76,7 @@ export function App(): ReactElement {
           <header className="topbar window-drag-region">
             <div>
               <div className="topbar-kicker">Capture workspace</div>
-              <h1>{screenTitles[activeScreen]}</h1>
+              <h1>{onboarding ? 'Welcome' : screenTitles[activeScreen]}</h1>
             </div>
             <div className="topbar-actions">
               <div
@@ -74,12 +102,19 @@ export function App(): ReactElement {
                 {error !== null && (
                   <div className="feedback feedback-error">
                     <span>{error}</span>
-                    <Button
-                      aria-label="Dismiss error"
-                      icon="circle"
-                      variant="icon"
-                      onClick={() => store.clearFeedback()}
-                    />
+                    <div className="feedback-actions">
+                      {recoveryAction !== null && (
+                        <Button variant="secondary" onClick={() => store.runRecoveryAction()}>
+                          {recoveryLabels[recoveryAction]}
+                        </Button>
+                      )}
+                      <Button
+                        aria-label="Dismiss error"
+                        icon="circle"
+                        variant="icon"
+                        onClick={() => store.clearFeedback()}
+                      />
+                    </div>
                   </div>
                 )}
                 {notice !== null && (
@@ -95,9 +130,15 @@ export function App(): ReactElement {
                 )}
               </div>
             )}
-            {activeScreen === 'recorder' && <RecorderView store={store} />}
-            {activeScreen === 'library' && <LibraryView store={store} />}
-            {activeScreen === 'settings' && <SettingsView store={store} />}
+            {onboarding ? (
+              <OnboardingView store={store} />
+            ) : (
+              <>
+                {activeScreen === 'recorder' && <RecorderView store={store} />}
+                {activeScreen === 'library' && <LibraryView store={store} />}
+                {activeScreen === 'settings' && <SettingsView store={store} />}
+              </>
+            )}
           </div>
 
           <footer className="content-footer">

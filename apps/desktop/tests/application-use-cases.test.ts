@@ -70,6 +70,7 @@ class FakeCapturePort implements CapturePort {
   public permissions: CapturePermissions = {
     screenRecording: 'granted',
     microphone: 'granted',
+    screenRecordingRequiresRestart: false,
   };
 
   public listSources(): Promise<readonly CaptureSource[]> {
@@ -267,7 +268,11 @@ describe('recording application use cases', () => {
 
   it('fails early when screen recording permission is missing', async () => {
     const capture = new FakeCapturePort();
-    capture.permissions = { screenRecording: 'denied', microphone: 'granted' };
+    capture.permissions = {
+      screenRecording: 'denied',
+      microphone: 'granted',
+      screenRecordingRequiresRestart: false,
+    };
     const dependencies = makeStartDependencies(
       capture,
       new FakeSessionRepository(),
@@ -282,6 +287,28 @@ describe('recording application use cases', () => {
       expect(error).toBeInstanceOf(DomainError);
       expect((error as DomainError).code).toBe('SCREEN_RECORDING_PERMISSION_REQUIRED');
     }
+  });
+
+  it('fails early with a restart instruction after permission is newly granted', async () => {
+    const capture = new FakeCapturePort();
+    capture.permissions = {
+      screenRecording: 'granted',
+      microphone: 'granted',
+      screenRecordingRequiresRestart: true,
+    };
+    const dependencies = makeStartDependencies(
+      capture,
+      new FakeSessionRepository(),
+      new FakeEngine(),
+      new FakeEvents(),
+    );
+
+    await expect(
+      new StartRecordingUseCase(dependencies).execute(makeRequest()),
+    ).rejects.toMatchObject({
+      code: 'SCREEN_RECORDING_PERMISSION_REQUIRED',
+      message: expect.stringContaining('Restart'),
+    });
   });
 });
 

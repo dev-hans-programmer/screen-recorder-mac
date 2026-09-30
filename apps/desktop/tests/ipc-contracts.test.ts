@@ -62,6 +62,31 @@ describe('IPC contracts', () => {
     ).toThrowError(IpcProtocolError);
   });
 
+  it('preserves application error codes so the UI can offer specific recovery', () => {
+    let received: unknown;
+
+    try {
+      parseIpcResponse('recording.start', {
+        protocolVersion,
+        requestId: 'request-source-gone',
+        command: 'recording.start',
+        ok: false,
+        error: {
+          code: 'INVALID_CAPTURE_SOURCE',
+          message: 'The selected source is unavailable.',
+          details: { sourceId: 'window:gone' },
+        },
+      });
+    } catch (error) {
+      received = error;
+    }
+
+    expect(received).toMatchObject({
+      code: 'INVALID_CAPTURE_SOURCE',
+      details: { sourceId: 'window:gone' },
+    });
+  });
+
   it('accepts a serializable versioned event', () => {
     const event = parseIpcEvent({
       protocolVersion,

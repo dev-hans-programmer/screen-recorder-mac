@@ -43,6 +43,7 @@ const capturePermissionsSchema = z
   .object({
     screenRecording: z.enum(['not-determined', 'granted', 'denied', 'restricted']),
     microphone: z.enum(['not-determined', 'granted', 'denied', 'restricted']),
+    screenRecordingRequiresRestart: z.boolean(),
   })
   .strict();
 
@@ -172,6 +173,7 @@ const appPreferencesSchema = z
     microphoneEnabled: z.boolean(),
     theme: z.enum(['system', 'light', 'dark']),
     shortcuts: shortcutPreferencesSchema,
+    onboardingCompleted: z.boolean(),
   })
   .strict();
 
@@ -185,6 +187,7 @@ const appPreferencesPatchSchema = z
     microphoneEnabled: z.boolean().optional(),
     theme: z.enum(['system', 'light', 'dark']).optional(),
     shortcuts: shortcutPreferencesSchema.partial().optional(),
+    onboardingCompleted: z.boolean().optional(),
   })
   .strict();
 
@@ -241,6 +244,11 @@ export const ipcRequestSchema = z.discriminatedUnion('command', [
   requestSchema('library.reveal', recordingIdPayloadSchema),
   requestSchema('library.delete', recordingIdPayloadSchema),
   requestSchema('library.open-folder', emptyPayloadSchema),
+  requestSchema(
+    'system.open-permission-settings',
+    z.object({ target: z.enum(['screen-recording', 'microphone']) }).strict(),
+  ),
+  requestSchema('app.relaunch', emptyPayloadSchema),
   requestSchema('preferences.get', emptyPayloadSchema),
   requestSchema('preferences.update', z.object({ patch: appPreferencesPatchSchema }).strict()),
 ]);
@@ -278,6 +286,8 @@ const responseDataSchemas = {
   'library.reveal': z.null(),
   'library.delete': z.null(),
   'library.open-folder': z.null(),
+  'system.open-permission-settings': z.null(),
+  'app.relaunch': z.null(),
   'preferences.get': appPreferencesSchema,
   'preferences.update': appPreferencesSchema,
 } as const;
@@ -396,6 +406,7 @@ export const ipcEventSchema = z.discriminatedUnion('type', [
       type: z.literal('permissions.changed'),
       screenRecording: z.string().min(1),
       microphone: z.string().min(1),
+      screenRecordingRequiresRestart: z.boolean(),
       occurredAt: z.number().finite(),
     })
     .strict(),
@@ -416,9 +427,18 @@ export const ipcEventSchema = z.discriminatedUnion('type', [
 export type IpcEvent = z.infer<typeof ipcEventSchema>;
 
 export class IpcProtocolError extends Error {
-  public constructor(message: string) {
+  public readonly code: string;
+  public readonly details: Readonly<Record<string, unknown>> | undefined;
+
+  public constructor(
+    message: string,
+    code = 'IPC_PROTOCOL_ERROR',
+    details?: Readonly<Record<string, unknown>>,
+  ) {
     super(message);
     this.name = 'IpcProtocolError';
+    this.code = code;
+    this.details = details;
   }
 }
 
@@ -443,7 +463,11 @@ export function parseIpcResponse<C extends IpcCommandName>(
   }
 
   if (!envelope.data.ok) {
-    throw new IpcProtocolError(envelope.data.error.message);
+    throw new IpcProtocolError(
+      envelope.data.error.message,
+      envelope.data.error.code,
+      envelope.data.error.details,
+    );
   }
 
   const data = responseDataSchemas[command as keyof typeof responseDataSchemas].safeParse(
@@ -479,6 +503,14 @@ export function parseIpcEvent(value: unknown): IpcEvent {
     throw new IpcProtocolError(`Invalid IPC event: ${result.error.message}`);
   }
 
+  return result.data;
+}
+
+export function parseAppPreferencesDto(value: unknown): AppPreferencesDto {
+  const result = appPreferencesSchema.safeParse(value);
+  if (!result.success) {
+    throw new IpcProtocolError(`Invalid preferences data: ${result.error.message}`);
+  }
   return result.data;
 }
 

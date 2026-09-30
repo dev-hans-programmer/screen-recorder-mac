@@ -112,6 +112,7 @@ export interface PermissionChangedEvent extends VersionedApplicationEvent {
   readonly type: 'permissions.changed';
   readonly screenRecording: string;
   readonly microphone: string;
+  readonly screenRecordingRequiresRestart: boolean;
   readonly occurredAt: number;
 }
 

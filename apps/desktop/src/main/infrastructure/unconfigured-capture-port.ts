@@ -4,6 +4,7 @@ import type { CapturePermissions, CaptureSource } from '@screen-recorder/domain'
 const unavailablePermissions: CapturePermissions = Object.freeze({
   screenRecording: 'not-determined',
   microphone: 'not-determined',
+  screenRecordingRequiresRestart: false,
 });
 
 const unavailableCapabilities: CaptureCapabilities = Object.freeze({

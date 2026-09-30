@@ -8,6 +8,7 @@ import {
   ListCaptureSourcesUseCase,
   ListRecordingsUseCase,
   OpenRecordingUseCase,
+  OpenPermissionSettingsUseCase,
   OpenRecordingsFolderUseCase,
   PauseRecordingUseCase,
   RecoverInterruptedRecordingUseCase,
@@ -28,10 +29,9 @@ import {
 } from '@screen-recorder/application';
 
 import { createConsoleLogger } from '../infrastructure/logger';
-import {
-  InMemoryPreferencesRepository,
-  InMemoryRecordingRepository,
-} from '../infrastructure/in-memory-repositories';
+import { InMemoryRecordingRepository } from '../infrastructure/in-memory-repositories';
+import { JsonPreferencesRepository } from '../infrastructure/json-preferences-repository';
+import { MacOsSystemSettings } from '../infrastructure/macos-system-settings';
 import { ElectronRecordingFileActions } from '../infrastructure/recording-file-actions';
 import { RecordingThumbnailService } from '../infrastructure/recording-thumbnail-service';
 import { SqliteRecordingCatalog } from '../infrastructure/sqlite-recording-catalog';
@@ -64,6 +64,7 @@ export interface ApplicationContainer {
     readonly listCaptureSources: ListCaptureSourcesUseCase;
     readonly listRecordings: ListRecordingsUseCase;
     readonly openRecording: OpenRecordingUseCase;
+    readonly openPermissionSettings: OpenPermissionSettingsUseCase;
     readonly openRecordingsFolder: OpenRecordingsFolderUseCase;
     readonly pauseRecording: PauseRecordingUseCase;
     readonly recoverInterruptedRecording: RecoverInterruptedRecordingUseCase;
@@ -85,6 +86,7 @@ export interface ApplicationContainerOptions {
   readonly defaultOutputDirectory: () => string;
   readonly libraryDatabasePath: string;
   readonly thumbnailCacheDirectory: string;
+  readonly preferencesFilePath: string;
 }
 
 export function createApplicationContainer(
@@ -93,10 +95,14 @@ export function createApplicationContainer(
   logger: Logger = createConsoleLogger(),
 ): ApplicationContainer {
   const sessions = new InMemoryRecordingRepository();
-  const preferences = new InMemoryPreferencesRepository();
+  const preferences = new JsonPreferencesRepository({
+    filePath: options.preferencesFilePath,
+    logger,
+  });
   const catalog = new SqliteRecordingCatalog({ databasePath: options.libraryDatabasePath, logger });
   const files = new ElectronRecordingFileActions();
   const thumbnails = new RecordingThumbnailService(options.thumbnailCacheDirectory);
+  const systemSettings = new MacOsSystemSettings();
   const clock = new SystemClock();
   const ids = new RandomIdGenerator();
   const supervisor = new NativeServiceSupervisor({
@@ -136,6 +142,7 @@ export function createApplicationContainer(
       listCaptureSources: new ListCaptureSourcesUseCase(capture),
       listRecordings: new ListRecordingsUseCase(catalog),
       openRecording: new OpenRecordingUseCase(catalog, files),
+      openPermissionSettings: new OpenPermissionSettingsUseCase(systemSettings),
       openRecordingsFolder: new OpenRecordingsFolderUseCase(files, async () => {
         const savedDirectory = (await preferences.get()).outputDirectory.trim();
         return savedDirectory || options.defaultOutputDirectory();

@@ -22,6 +22,7 @@ export interface NativeSourceDto {
 export interface NativePermissionsDto {
   readonly screenRecording: string;
   readonly microphone: string;
+  readonly screenRecordingRequiresRestart: boolean;
 }
 
 export interface NativeCapabilitiesDto {
@@ -158,6 +159,10 @@ export function parseNativePermissions(value: unknown): CapturePermissions {
   const permissions = record(value, 'permission');
   const screenRecording = stringValue(permissions.screenRecording, 'screenRecording');
   const microphone = stringValue(permissions.microphone, 'microphone');
+  const screenRecordingRequiresRestart = booleanValue(
+    permissions.screenRecordingRequiresRestart,
+    'screenRecordingRequiresRestart',
+  );
 
   if (
     !['not-determined', 'granted', 'denied', 'restricted'].includes(screenRecording) ||
@@ -172,6 +177,7 @@ export function parseNativePermissions(value: unknown): CapturePermissions {
   return {
     screenRecording: screenRecording as CapturePermissions['screenRecording'],
     microphone: microphone as CapturePermissions['microphone'],
+    screenRecordingRequiresRestart,
   };
 }
 

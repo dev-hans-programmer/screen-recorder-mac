@@ -19,6 +19,12 @@ export interface RecordingThumbnailPort {
   remove(recordingId: string): Promise<void>;
 }
 
+export type PermissionSettingsTarget = 'screen-recording' | 'microphone';
+
+export interface SystemSettingsPort {
+  openPermissionSettings(target: PermissionSettingsTarget): Promise<void>;
+}
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface Logger {

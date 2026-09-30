@@ -11,6 +11,7 @@ export * from './use-cases/get-preferences';
 export * from './use-cases/list-capture-sources';
 export * from './use-cases/list-recordings';
 export * from './use-cases/open-recording';
+export * from './use-cases/open-permission-settings';
 export * from './use-cases/open-recordings-folder';
 export * from './use-cases/pause-recording';
 export * from './use-cases/recover-interrupted-recording';

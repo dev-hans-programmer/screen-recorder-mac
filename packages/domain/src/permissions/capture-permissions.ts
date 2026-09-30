@@ -3,10 +3,11 @@ export type PermissionState = 'not-determined' | 'granted' | 'denied' | 'restric
 export interface CapturePermissions {
   readonly screenRecording: PermissionState;
   readonly microphone: PermissionState;
+  readonly screenRecordingRequiresRestart: boolean;
 }
 
 export function canCaptureScreen(permissions: CapturePermissions): boolean {
-  return permissions.screenRecording === 'granted';
+  return permissions.screenRecording === 'granted' && !permissions.screenRecordingRequiresRestart;
 }
 
 export function missingPermissionNames(

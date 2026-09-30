@@ -435,7 +435,7 @@ A task is complete when:
 
 ## Phase 10 — Preferences and onboarding
 
-- [ ] T100 Implement preferences storage.
+- [x] T100 Implement preferences storage.
   - Store output directory.
   - Store quality defaults.
   - Store audio defaults.
@@ -443,14 +443,14 @@ A task is complete when:
   - Store theme preference.
   - Acceptance: settings persist across restarts.
 
-- [ ] T101 Implement first-run onboarding.
+- [x] T101 Implement first-run onboarding.
   - Explain Screen Recording permission.
   - Explain microphone permission when selected.
   - Provide buttons to open System Settings.
   - Detect permission changes.
   - Acceptance: a new user can reach a successful first recording without guessing.
 
-- [ ] T102 Implement permission recovery flows.
+- [x] T102 Implement permission recovery flows.
   - Handle permission denial.
   - Handle permission revocation.
   - Handle required restart.

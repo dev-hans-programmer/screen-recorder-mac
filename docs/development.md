@@ -45,7 +45,7 @@ Copy `apps/desktop/.env.example` to a local `.env` file only when needed. Do not
 | `SCREEN_RECORDER_LOG_LEVEL` | `silent`, `error`, `warn`, `info`, `debug` | `info`  | Controls future main-process logging       |
 | `SCREEN_RECORDER_DEVTOOLS`  | `0`, `1`                                   | `0`     | Opens Chromium DevTools during development |
 
-## Expected Phase 9 behavior
+## Expected Phase 10 behavior
 
 The app opens a responsive recorder workspace with Recorder, Library, and Settings navigation. The
 workspace loads native capture sources, supports display/window/application selection, region
@@ -58,6 +58,11 @@ Completed captures persist in a versioned SQLite catalog and appear in the Libra
 The Library supports cached native thumbnails, grid/list layouts, search, sorting, rename, open,
 Reveal in Finder, recoverable Trash deletion, and missing-file handling. See
 [recording-library.md](recording-library.md) for storage and safety details.
+
+Preferences now survive restarts in a versioned, atomic JSON store. A first-run setup explains
+Screen Recording and optional microphone access, while Recorder and Settings expose recovery
+actions for denied or revoked access, required helper restarts, and stale capture sources. See
+[preferences-and-permissions.md](preferences-and-permissions.md) for storage and recovery behavior.
 
 See [security.md](security.md) for the Electron boundary and IPC rules.
 

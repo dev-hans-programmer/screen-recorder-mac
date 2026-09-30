@@ -15,6 +15,8 @@ import type {
 import type { ScreenRecorderApi } from '../../shared/screen-recorder-api';
 
 export type AppScreen = 'recorder' | 'library' | 'settings';
+export type RecoveryAction =
+  'open-screen-settings' | 'open-microphone-settings' | 'restart-application' | 'refresh-sources';
 export type Operation =
   | 'idle'
   | 'initializing'
@@ -64,6 +66,7 @@ export interface RendererState {
   readonly operation: Operation;
   readonly error: string | null;
   readonly notice: string | null;
+  readonly recoveryAction: RecoveryAction | null;
 }
 
 const initialState: RendererState = {
@@ -91,10 +94,17 @@ const initialState: RendererState = {
   operation: 'idle',
   error: null,
   notice: null,
+  recoveryAction: null,
 };
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.length > 0 ? error.message : fallback;
+}
+
+function errorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String(error.code)
+    : undefined;
 }
 
 function withRecording(
@@ -130,6 +140,8 @@ export class RendererStore {
 
   private initializationPromise: Promise<void> | undefined;
 
+  private permissionRefreshPromise: Promise<void> | undefined;
+
   public constructor(private readonly api: ScreenRecorderApi) {}
 
   public getState = (): RendererState => this.state;
@@ -164,7 +176,15 @@ export class RendererStore {
         this.setState({
           ...(resolvedPreferences === null ? {} : { preferences: resolvedPreferences }),
           ...(sources.status === 'fulfilled' ? this.sourceState(sources.value) : {}),
-          ...(permissions.status === 'fulfilled' ? { permissions: permissions.value } : {}),
+          ...(permissions.status === 'fulfilled'
+            ? {
+                permissions: permissions.value,
+                recoveryAction: this.permissionRecoveryAction(
+                  permissions.value,
+                  resolvedPreferences?.microphoneEnabled ?? false,
+                ),
+              }
+            : {}),
           ...(recordings.status === 'fulfilled' ? { recordings: recordings.value } : {}),
           ...(resolvedPreferences === null
             ? {}
@@ -194,7 +214,7 @@ export class RendererStore {
   }
 
   public clearFeedback(): void {
-    this.setState({ error: null, notice: null });
+    this.setState({ error: null, notice: null, recoveryAction: null });
   }
 
   public selectSource(sourceId: string): void {
@@ -214,7 +234,7 @@ export class RendererStore {
   public async refreshSources(): Promise<void> {
     try {
       const sources = await this.api.listCaptureSources();
-      this.setState({ ...this.sourceState(sources), error: null });
+      this.setState({ ...this.sourceState(sources), error: null, recoveryAction: null });
     } catch (error: unknown) {
       this.setState({ error: errorMessage(error, 'Capture sources could not be refreshed.') });
     }
@@ -304,7 +324,15 @@ export class RendererStore {
   }
 
   public setRecordingOptions(patch: Partial<RecordingOptions>): void {
-    this.setState({ recordingOptions: { ...this.state.recordingOptions, ...patch }, error: null });
+    const recordingOptions = { ...this.state.recordingOptions, ...patch };
+    this.setState({
+      recordingOptions,
+      error: null,
+      recoveryAction: this.permissionRecoveryAction(
+        this.state.permissions,
+        recordingOptions.microphone,
+      ),
+    });
   }
 
   public async selectRegion(): Promise<void> {
@@ -344,19 +372,112 @@ export class RendererStore {
     else if (this.state.activeSession !== null) void this.pauseRecording();
   }
 
-  public async requestPermissions(): Promise<void> {
+  public async refreshPermissions(silent = false): Promise<void> {
+    if (this.permissionRefreshPromise !== undefined) return this.permissionRefreshPromise;
+    const pending = this.refreshPermissionsInternal(silent);
+    this.permissionRefreshPromise = pending;
+    try {
+      await pending;
+    } finally {
+      if (this.permissionRefreshPromise === pending) this.permissionRefreshPromise = undefined;
+    }
+  }
+
+  private async refreshPermissionsInternal(silent: boolean): Promise<void> {
+    try {
+      const previous = this.state.permissions;
+      const permissions = await this.api.getCapturePermissions();
+      const revoked =
+        previous?.screenRecording === 'granted' && permissions.screenRecording !== 'granted';
+      const recoveryAction = this.permissionRecoveryAction(
+        permissions,
+        this.state.recordingOptions.microphone,
+      );
+      this.setState({
+        permissions,
+        recoveryAction,
+        ...(revoked
+          ? { error: 'Screen Recording access was revoked. Re-enable it in System Settings.' }
+          : permissions.screenRecordingRequiresRestart
+            ? { notice: 'Restart Capture to finish enabling Screen Recording.' }
+            : silent
+              ? {}
+              : { error: null }),
+      });
+    } catch (error: unknown) {
+      if (!silent) {
+        this.setState({ error: errorMessage(error, 'Permissions could not be refreshed.') });
+      }
+    }
+  }
+
+  public async requestPermissions(
+    microphone = this.state.recordingOptions.microphone,
+  ): Promise<void> {
     this.setState({ operation: 'requesting-permission', error: null });
 
     try {
       const permissions = await this.api.requestCapturePermissions({
-        microphone: this.state.recordingOptions.microphone,
+        microphone,
       });
-      this.setState({ permissions, operation: 'idle' });
+      const recoveryAction = this.permissionRecoveryAction(permissions, microphone);
+      this.setState({
+        permissions,
+        operation: 'idle',
+        recoveryAction,
+        ...(permissions.screenRecordingRequiresRestart
+          ? { notice: 'Screen Recording was enabled. Restart Capture before recording.' }
+          : permissions.screenRecording !== 'granted'
+            ? { error: 'Allow Screen Recording in System Settings to continue.' }
+            : microphone && permissions.microphone !== 'granted'
+              ? { error: 'Allow Microphone access in System Settings, or continue without it.' }
+              : { notice: 'Capture permissions are ready.', error: null }),
+      });
     } catch (error: unknown) {
       this.setState({
         operation: 'idle',
         error: errorMessage(error, 'Permission request failed.'),
       });
+    }
+  }
+
+  public async openPermissionSettings(target: 'screen-recording' | 'microphone'): Promise<void> {
+    try {
+      await this.api.openPermissionSettings(target);
+      this.setState({ notice: 'System Settings opened. Return here after changing access.' });
+    } catch (error: unknown) {
+      this.setState({ error: errorMessage(error, 'System Settings could not be opened.') });
+    }
+  }
+
+  public async relaunchApplication(): Promise<void> {
+    try {
+      await this.api.relaunchApplication();
+    } catch (error: unknown) {
+      this.setState({ error: errorMessage(error, 'Capture could not be restarted.') });
+    }
+  }
+
+  public async completeOnboarding(): Promise<void> {
+    await this.updatePreferences({ onboardingCompleted: true });
+  }
+
+  public runRecoveryAction(): void {
+    switch (this.state.recoveryAction) {
+      case 'open-screen-settings':
+        void this.openPermissionSettings('screen-recording');
+        return;
+      case 'open-microphone-settings':
+        void this.openPermissionSettings('microphone');
+        return;
+      case 'restart-application':
+        void this.relaunchApplication();
+        return;
+      case 'refresh-sources':
+        void this.refreshSources();
+        return;
+      case null:
+        return;
     }
   }
 
@@ -371,11 +492,41 @@ export class RendererStore {
       return;
     }
 
-    if (
-      this.state.permissions?.screenRecording !== 'granted' ||
-      (this.state.recordingOptions.microphone && this.state.permissions.microphone !== 'granted')
-    ) {
-      await this.requestPermissions();
+    if (this.state.permissions?.screenRecordingRequiresRestart === true) {
+      this.setState({
+        error: 'Restart Capture before starting your first recording.',
+        recoveryAction: 'restart-application',
+      });
+      return;
+    }
+
+    if (this.state.permissions?.screenRecording !== 'granted') {
+      if (
+        this.state.permissions?.screenRecording === 'denied' ||
+        this.state.permissions?.screenRecording === 'restricted'
+      ) {
+        this.setState({
+          error: 'Screen Recording access is disabled in System Settings.',
+          recoveryAction: 'open-screen-settings',
+        });
+      } else {
+        await this.requestPermissions(false);
+      }
+      return;
+    }
+
+    if (this.state.recordingOptions.microphone && this.state.permissions.microphone !== 'granted') {
+      if (
+        this.state.permissions.microphone === 'denied' ||
+        this.state.permissions.microphone === 'restricted'
+      ) {
+        this.setState({
+          error: 'Microphone access is disabled. Enable it or turn off microphone recording.',
+          recoveryAction: 'open-microphone-settings',
+        });
+      } else {
+        await this.requestPermissions(true);
+      }
       return;
     }
 
@@ -409,9 +560,23 @@ export class RendererStore {
         operation: 'idle',
       });
     } catch (error: unknown) {
+      const code = errorCode(error);
+      const normalizedMessage = errorMessage(error, '').toLocaleLowerCase();
+      const microphoneFailure = normalizedMessage.includes('microphone');
+      const restartFailure = normalizedMessage.includes('restart');
       this.setState({
         operation: 'idle',
         error: errorMessage(error, 'Recording could not start.'),
+        recoveryAction:
+          code === 'INVALID_CAPTURE_SOURCE'
+            ? 'refresh-sources'
+            : code === 'SCREEN_RECORDING_PERMISSION_REQUIRED'
+              ? restartFailure
+                ? 'restart-application'
+                : 'open-screen-settings'
+              : code === 'UNSUPPORTED_AUDIO' || microphoneFailure
+                ? 'open-microphone-settings'
+                : 'refresh-sources',
       });
     }
   }
@@ -483,6 +648,10 @@ export class RendererStore {
       this.setState({
         preferences,
         recordingOptions: this.optionsFromPreferences(preferences, this.state.recordingOptions),
+        recoveryAction: this.permissionRecoveryAction(
+          this.state.permissions,
+          preferences.microphoneEnabled,
+        ),
         operation: 'idle',
       });
     } catch (error: unknown) {
@@ -524,6 +693,24 @@ export class RendererStore {
       systemAudio: preferences.systemAudioEnabled,
       microphone: preferences.microphoneEnabled,
     };
+  }
+
+  private permissionRecoveryAction(
+    permissions: CapturePermissionsDto | null,
+    microphoneRequested: boolean,
+  ): RecoveryAction | null {
+    if (permissions === null) return null;
+    if (permissions.screenRecordingRequiresRestart) return 'restart-application';
+    if (permissions.screenRecording === 'denied' || permissions.screenRecording === 'restricted') {
+      return 'open-screen-settings';
+    }
+    if (
+      microphoneRequested &&
+      (permissions.microphone === 'denied' || permissions.microphone === 'restricted')
+    ) {
+      return 'open-microphone-settings';
+    }
+    return null;
   }
 
   private handleEvent(event: IpcEvent): void {
@@ -589,6 +776,7 @@ export class RendererStore {
           permissions: {
             screenRecording: event.screenRecording as CapturePermissionsDto['screenRecording'],
             microphone: event.microphone as CapturePermissionsDto['microphone'],
+            screenRecordingRequiresRestart: event.screenRecordingRequiresRestart,
           },
         });
         return;

@@ -46,6 +46,7 @@ export function toCaptureSourceDto(source: {
 export function toCapturePermissionsDto(permissions: {
   readonly screenRecording: CapturePermissionsDto['screenRecording'];
   readonly microphone: CapturePermissionsDto['microphone'];
+  readonly screenRecordingRequiresRestart: boolean;
 }): CapturePermissionsDto {
   return { ...permissions };
 }
@@ -217,8 +218,9 @@ export function toIpcError(error: unknown): IpcError {
 
   if (error instanceof IpcProtocolError) {
     return {
-      code: 'INVALID_IPC_REQUEST',
+      code: error.code === 'IPC_PROTOCOL_ERROR' ? 'INVALID_IPC_REQUEST' : error.code,
       message: error.message,
+      ...(error.details === undefined ? {} : { details: error.details }),
     };
   }
 

@@ -51,7 +51,9 @@ export class StartRecordingUseCase {
     if (!canCaptureScreen(permissions)) {
       throw new DomainError(
         'SCREEN_RECORDING_PERMISSION_REQUIRED',
-        'Screen Recording permission is required before capture can start.',
+        permissions.screenRecordingRequiresRestart
+          ? 'Restart Screen Recorder before capture can start.'
+          : 'Screen Recording permission is required before capture can start.',
       );
     }
 

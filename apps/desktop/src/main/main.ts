@@ -88,6 +88,7 @@ function createMainWindow(): void {
       defaultOutputDirectory: () => path.join(app.getPath('videos'), 'Screen Recorder'),
       libraryDatabasePath: path.join(app.getPath('userData'), 'library', 'recordings.sqlite3'),
       thumbnailCacheDirectory: path.join(app.getPath('userData'), 'library', 'thumbnails'),
+      preferencesFilePath: path.join(app.getPath('userData'), 'preferences.json'),
     });
     lifecycleManager = createLifecycleManager(async () => {
       desktopControls?.dispose();
@@ -102,6 +103,11 @@ function createMainWindow(): void {
       applicationContainer,
       regionSelectionManager ?? undefined,
       (preferences) => desktopControls?.update(preferences.shortcuts),
+      async () => {
+        await lifecycleManager?.shutdown();
+        app.relaunch();
+        app.exit(0);
+      },
     );
     ipcControllerRegistered = true;
     void applicationContainer.useCases.getPreferences.execute().then((preferences) => {

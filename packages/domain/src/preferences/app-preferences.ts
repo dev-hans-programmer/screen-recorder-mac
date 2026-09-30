@@ -7,6 +7,7 @@ import type {
 import { getRecordingProfile } from '../recording/recording-profile';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
+export const appPreferencesSchemaVersion = 1 as const;
 
 export interface ShortcutPreferences {
   readonly startStop: string;
@@ -22,6 +23,7 @@ export interface AppPreferences {
   readonly microphoneEnabled: boolean;
   readonly theme: ThemePreference;
   readonly shortcuts: ShortcutPreferences;
+  readonly onboardingCompleted: boolean;
 }
 
 export type AppPreferencesPatch = Partial<Omit<AppPreferences, 'shortcuts'>> & {
@@ -36,6 +38,7 @@ export const defaultAppPreferences: AppPreferences = Object.freeze({
   systemAudioEnabled: true,
   microphoneEnabled: false,
   theme: 'system',
+  onboardingCompleted: false,
   shortcuts: Object.freeze({
     startStop: 'CommandOrControl+Shift+R',
     pauseResume: 'CommandOrControl+Shift+P',

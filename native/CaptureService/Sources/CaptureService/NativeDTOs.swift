@@ -30,6 +30,7 @@ enum NativePermissionState: String, Codable, Sendable {
 struct NativePermissions: Codable, Sendable, Equatable {
   let screenRecording: NativePermissionState
   let microphone: NativePermissionState
+  let screenRecordingRequiresRestart: Bool
 }
 
 struct NativeCapabilities: Codable, Sendable, Equatable {

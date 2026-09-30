@@ -30,6 +30,7 @@ const preferences: AppPreferencesDto = {
   systemAudioEnabled: true,
   microphoneEnabled: false,
   theme: 'system',
+  onboardingCompleted: true,
   shortcuts: {
     startStop: 'CommandOrControl+Shift+R',
     pauseResume: 'CommandOrControl+Shift+P',
@@ -39,6 +40,7 @@ const preferences: AppPreferencesDto = {
 const permissions: CapturePermissionsDto = {
   screenRecording: 'granted',
   microphone: 'not-determined',
+  screenRecordingRequiresRestart: false,
 };
 
 const artifact: RecordingArtifactDto = {
@@ -132,6 +134,8 @@ function createApi() {
     revealRecording: vi.fn(async () => undefined),
     deleteRecording: vi.fn(async () => undefined),
     openRecordingsFolder: vi.fn(async () => undefined),
+    openPermissionSettings: vi.fn(async () => undefined),
+    relaunchApplication: vi.fn(async () => undefined),
     getPreferences: vi.fn(async () => currentPreferences),
     updatePreferences: vi.fn(async (patch) => {
       currentPreferences = {
@@ -244,6 +248,7 @@ describe('RendererStore', () => {
     vi.mocked(fixture.api.requestCapturePermissions).mockResolvedValue({
       screenRecording: 'granted',
       microphone: 'granted',
+      screenRecordingRequiresRestart: false,
     });
     await store.startRecording();
     await store.startRecording();
@@ -271,6 +276,71 @@ describe('RendererStore', () => {
 
     expect(store.getState().sources).toEqual([]);
     expect(store.getState().selectedSourceId).toBeNull();
+  });
+
+  it('persists onboarding completion through the preferences boundary', async () => {
+    const fixture = createApi();
+    const store = new RendererStore(fixture.api);
+
+    await store.initialize();
+    await store.completeOnboarding();
+
+    expect(fixture.api.updatePreferences).toHaveBeenCalledWith({ onboardingCompleted: true });
+    expect(store.getState().preferences?.onboardingCompleted).toBe(true);
+  });
+
+  it('blocks capture and offers an app restart when macOS requires one', async () => {
+    const fixture = createApi();
+    vi.mocked(fixture.api.getCapturePermissions).mockResolvedValue({
+      ...permissions,
+      screenRecordingRequiresRestart: true,
+    });
+    const store = new RendererStore(fixture.api);
+
+    await store.initialize();
+    await store.startRecording();
+    store.runRecoveryAction();
+
+    expect(fixture.api.startRecording).not.toHaveBeenCalled();
+    expect(store.getState().recoveryAction).toBe('restart-application');
+    await vi.waitFor(() => expect(fixture.api.relaunchApplication).toHaveBeenCalledOnce());
+  });
+
+  it('detects revoked screen access and opens its System Settings pane', async () => {
+    const fixture = createApi();
+    const store = new RendererStore(fixture.api);
+    await store.initialize();
+    vi.mocked(fixture.api.getCapturePermissions).mockResolvedValueOnce({
+      screenRecording: 'denied',
+      microphone: 'not-determined',
+      screenRecordingRequiresRestart: false,
+    });
+
+    await store.refreshPermissions();
+    store.runRecoveryAction();
+
+    expect(store.getState().error).toContain('revoked');
+    expect(store.getState().recoveryAction).toBe('open-screen-settings');
+    await vi.waitFor(() =>
+      expect(fixture.api.openPermissionSettings).toHaveBeenCalledWith('screen-recording'),
+    );
+  });
+
+  it('offers to refresh sources after a selected source becomes invalid', async () => {
+    const fixture = createApi();
+    vi.mocked(fixture.api.startRecording).mockRejectedValueOnce(
+      Object.assign(new Error('The selected window is no longer available.'), {
+        code: 'INVALID_CAPTURE_SOURCE',
+      }),
+    );
+    const store = new RendererStore(fixture.api);
+    await store.initialize();
+
+    await store.startRecording();
+    store.runRecoveryAction();
+
+    expect(store.getState().recoveryAction).toBe('refresh-sources');
+    await vi.waitFor(() => expect(fixture.api.listCaptureSources).toHaveBeenCalledTimes(2));
   });
 
   it('renames and deletes recordings through purpose-built library actions', async () => {

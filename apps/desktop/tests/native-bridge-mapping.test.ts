@@ -84,8 +84,16 @@ describe('native bridge infrastructure', () => {
 
   it('maps native permission and service failures to domain errors', () => {
     expect(
-      parseNativePermissions({ screenRecording: 'granted', microphone: 'not-determined' }),
-    ).toEqual({ screenRecording: 'granted', microphone: 'not-determined' });
+      parseNativePermissions({
+        screenRecording: 'granted',
+        microphone: 'not-determined',
+        screenRecordingRequiresRestart: false,
+      }),
+    ).toEqual({
+      screenRecording: 'granted',
+      microphone: 'not-determined',
+      screenRecordingRequiresRestart: false,
+    });
 
     const error = toNativeDomainError(
       new NativeServiceClientError({

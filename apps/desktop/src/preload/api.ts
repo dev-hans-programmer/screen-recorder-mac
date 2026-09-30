@@ -101,6 +101,12 @@ export function createScreenRecorderApi(
     openRecordingsFolder: async () => {
       await sendCommand('library.open-folder', {});
     },
+    openPermissionSettings: async (target) => {
+      await sendCommand('system.open-permission-settings', { target });
+    },
+    relaunchApplication: async () => {
+      await sendCommand('app.relaunch', {});
+    },
     getPreferences: () => sendCommand('preferences.get', {}) as Promise<AppPreferencesDto>,
     updatePreferences: (patch) =>
       sendCommand('preferences.update', { patch }) as Promise<AppPreferencesDto>,
