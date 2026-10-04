@@ -3,23 +3,29 @@ import { open, rename, rm } from 'node:fs/promises';
 import os from 'node:os';
 
 import { app, dialog } from 'electron';
+import { version as reactVersion } from 'react';
 import type { DiagnosticsReportPort } from '@screen-recorder/application';
 import type { RecordingDiagnostics } from '@screen-recorder/domain';
 
+import { appMetadata } from '../../shared/app-metadata';
+import { nativeProtocolVersion } from './native/native-service-protocol';
 import type { StructuredFileLogger } from './logger';
 
 interface ElectronDiagnosticsReportOptions {
   readonly logger: Pick<StructuredFileLogger, 'readRecentErrors'>;
   readonly now?: () => number;
+  readonly getNativeServiceVersion?: () => string | undefined;
 }
 
 export class ElectronDiagnosticsReport implements DiagnosticsReportPort {
   private readonly logger: Pick<StructuredFileLogger, 'readRecentErrors'>;
   private readonly now: () => number;
+  private readonly getNativeServiceVersion: () => string | undefined;
 
   public constructor(options: ElectronDiagnosticsReportOptions) {
     this.logger = options.logger;
     this.now = options.now ?? Date.now;
+    this.getNativeServiceVersion = options.getNativeServiceVersion ?? (() => undefined);
   }
 
   public async exportReport(
@@ -37,7 +43,7 @@ export class ElectronDiagnosticsReport implements DiagnosticsReportPort {
 
     const processor = os.cpus()[0];
     const report = {
-      reportVersion: 1,
+      reportVersion: 2,
       generatedAt: generatedAt.toISOString(),
       privacy: {
         includesRecordingContent: false,
@@ -47,9 +53,16 @@ export class ElectronDiagnosticsReport implements DiagnosticsReportPort {
       application: {
         name: app.getName(),
         version: app.getVersion(),
+      },
+      runtimes: {
         electronVersion: process.versions.electron ?? 'unknown',
         nodeVersion: process.versions.node,
-        captureProtocolVersion: 1,
+        reactVersion,
+      },
+      nativeService: {
+        expectedVersion: appMetadata.nativeServiceVersion,
+        observedVersion: this.getNativeServiceVersion() ?? 'not-started',
+        protocolVersion: nativeProtocolVersion,
       },
       system: {
         operatingSystem: 'macOS',

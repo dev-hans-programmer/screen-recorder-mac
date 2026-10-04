@@ -9,7 +9,8 @@ Preferences are stored in `preferences.json` under Electron's per-user `userData
 file contains a schema version and the complete preference snapshot. Updates are written to a
 private temporary file, flushed, and atomically renamed so an interrupted write cannot leave a
 partially written settings file. Invalid files are quarantined with a `.corrupt-<timestamp>` suffix
-and safe defaults are restored.
+and safe defaults are restored. Older schemas are upgraded in ordered steps and rewritten only
+after validation, preserving user choices across application upgrades.
 
 The persisted snapshot includes:
 

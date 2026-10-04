@@ -45,8 +45,9 @@ pnpm test:packaged:probe
 
 The checks verify artifact hashes, app-icon and ASAR/helper placement, executable permissions,
 matching app and helper architectures, code-signature integrity, packaged renderer startup, and
-helper discovery. Use `pnpm test:packaged` on a Mac with Screen Recording permission to include a
-short real capture.
+helper discovery. Package verification also compares the canonical version with both Info.plist
+version fields and a live native-helper handshake. Use `pnpm test:packaged` on a Mac with Screen
+Recording permission to include a short real capture.
 
 ## Signing modes
 

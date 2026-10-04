@@ -43,6 +43,7 @@ export interface NativeServiceClientOptions {
   readonly onEvent?: (event: NativeEvent) => void;
   readonly onFailure?: (failure: NativeServiceFailure) => void;
   readonly onLog?: (message: string) => void;
+  readonly onServiceVersion?: (version: string) => void;
 }
 
 export interface NativeRequestOptions {
@@ -68,6 +69,7 @@ export class CaptureServiceClient {
   private readonly onEvent: ((event: NativeEvent) => void) | undefined;
   private readonly onFailure: ((failure: NativeServiceFailure) => void) | undefined;
   private readonly onLog: ((message: string) => void) | undefined;
+  private readonly onServiceVersion: ((version: string) => void) | undefined;
   private readonly pending = new Map<string, PendingRequest>();
 
   private child: ChildProcessWithoutNullStreams | undefined;
@@ -85,6 +87,7 @@ export class CaptureServiceClient {
     this.onEvent = options.onEvent;
     this.onFailure = options.onFailure;
     this.onLog = options.onLog;
+    this.onServiceVersion = options.onServiceVersion;
   }
 
   public get running(): boolean {
@@ -306,9 +309,12 @@ export class CaptureServiceClient {
     }
 
     if (isNativeEvent(message)) {
+      this.onServiceVersion?.(message.serviceVersion);
       this.onEvent?.(message);
       return;
     }
+
+    this.onServiceVersion?.(message.serviceVersion);
 
     const pending = this.pending.get(message.requestId);
 

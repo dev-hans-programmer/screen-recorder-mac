@@ -5,7 +5,7 @@
   "description": "A native-feeling macOS screen recorder built with React, Electron, TypeScript, and Swift.",
   "packageManager": "pnpm@12.5.1",
   "engines": {
-    "node": ">=24 <27",
+    "node": ">=24 <25",
     "pnpm": ">=12 <13"
   },
   "scripts": {
@@ -28,6 +28,9 @@
     "test:performance": "node scripts/hardware-validation.mjs --performance --output validation-results/performance.json",
     "artifacts:checksums": "node scripts/generate-checksums.mjs apps/desktop/out/make",
     "artifacts:verify": "node scripts/generate-checksums.mjs apps/desktop/out/make --verify",
+    "version:check": "node scripts/manage-version.mjs check",
+    "version:set": "node scripts/manage-version.mjs set",
+    "release:check": "pnpm version:check && pnpm typecheck && pnpm lint && pnpm format && pnpm test",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "clean": "rimraf apps/desktop/.vite apps/desktop/out apps/desktop/coverage"

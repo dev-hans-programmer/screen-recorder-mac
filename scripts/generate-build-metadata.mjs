@@ -37,6 +37,9 @@ async function filesRecursively(directory) {
 }
 
 const packageJson = JSON.parse(await readFile(path.resolve('package.json'), 'utf8'));
+const desktopPackageJson = JSON.parse(
+  await readFile(path.resolve('apps/desktop/package.json'), 'utf8'),
+);
 const lockfilePath = path.resolve('pnpm-lock.yaml');
 const artifactPaths = (await filesRecursively(artifactDirectory))
   .filter((filePath) => ['.dmg', '.zip'].includes(path.extname(filePath).toLowerCase()))
@@ -54,10 +57,13 @@ const commitSha = process.env['GITHUB_SHA'] ?? command('git', ['rev-parse', 'HEA
 const sourceDateEpoch =
   process.env['SOURCE_DATE_EPOCH'] ?? command('git', ['show', '-s', '--format=%ct', commitSha]);
 const metadata = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   application: {
     name: packageJson.name,
     version: packageJson.version,
+    electronVersion: desktopPackageJson.devDependencies.electron,
+    reactVersion: desktopPackageJson.dependencies.react,
+    nativeServiceVersion: packageJson.version,
   },
   source: {
     commitSha,

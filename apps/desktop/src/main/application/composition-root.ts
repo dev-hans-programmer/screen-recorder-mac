@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
+import { appMetadata } from '../../shared/app-metadata';
+
 import {
   CheckCapturePermissionsUseCase,
   ChooseRecordingDirectoryUseCase,
@@ -106,6 +108,7 @@ export interface ApplicationContainerOptions {
   readonly diagnosticsFilePath: string;
   readonly diagnosticsReport: DiagnosticsReportPort;
   readonly recordingDirectoryPicker: RecordingDirectoryPickerPort;
+  readonly onNativeServiceVersion?: (version: string) => void;
 }
 
 export function createApplicationContainer(
@@ -130,7 +133,8 @@ export function createApplicationContainer(
   const ids = new RandomIdGenerator();
   const supervisor = new NativeServiceSupervisor({
     executablePath: options.nativeServicePath,
-    clientVersion: '0.1.0',
+    clientVersion: appMetadata.version,
+    onServiceVersion: options.onNativeServiceVersion,
     onFailure: (failure) => {
       logger.error('Native CaptureService failed.', {
         operation: failure.operation,

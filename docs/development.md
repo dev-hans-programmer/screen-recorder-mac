@@ -3,7 +3,7 @@
 ## Required tools
 
 - macOS 15 or newer.
-- Node.js 24 or another version allowed by the root `package.json` engines field.
+- Node.js 24, with the exact validated release pinned in `.node-version`.
 - pnpm 12.
 - Xcode command-line tools.
 
@@ -51,6 +51,8 @@ pnpm typecheck
 pnpm lint
 pnpm test
 pnpm format
+pnpm version:check
+pnpm release:check
 pnpm test:hardware:probe
 pnpm quality:validate "/path/to/recording.mp4"
 ```
@@ -96,6 +98,8 @@ can export a privacy-safe JSON support report from Settings. See
 See [security.md](security.md) for the Electron boundary and IPC rules.
 See [testing-and-quality.md](testing-and-quality.md) for packaged, compatibility, performance, and
 media-file validation, and [compatibility-matrix.md](compatibility-matrix.md) for recorded results.
+See [operations.md](operations.md) for the release, installation, troubleshooting, migration, and
+native-debugging documentation index.
 
 ## Native CaptureService commands
 

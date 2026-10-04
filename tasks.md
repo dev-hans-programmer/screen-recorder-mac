@@ -623,18 +623,18 @@ A task is complete when:
 
 ## Phase 15 — Release readiness
 
-- [ ] T150 Add version management.
+- [x] T150 Add version management.
   - Keep Electron, React, Swift helper, and application versions visible in diagnostics.
   - Add a version bump process.
   - Acceptance: packaged artifacts report the correct version everywhere.
 
-- [ ] T151 Add changelog and migration handling.
+- [x] T151 Add changelog and migration handling.
   - Document user-visible changes.
   - Version preferences and metadata schemas.
   - Add migrations for future releases.
   - Acceptance: upgrades do not lose settings or recording metadata.
 
-- [ ] T152 Perform release-candidate testing.
+- [x] T152 Perform release-candidate testing.
   - Test clean install.
   - Test upgrade install.
   - Test permission onboarding.
@@ -642,7 +642,7 @@ A task is complete when:
   - Test artifact download and launch.
   - Acceptance: release checklist is completed on a clean macOS machine.
 
-- [ ] T153 Create operational documentation.
+- [x] T153 Create operational documentation.
   - Installation guide.
   - Troubleshooting guide.
   - Permission guide.

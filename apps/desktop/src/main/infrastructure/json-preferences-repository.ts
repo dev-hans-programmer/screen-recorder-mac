@@ -16,6 +16,57 @@ interface JsonPreferencesRepositoryOptions {
   readonly now?: () => number;
 }
 
+interface MigratedPreferencesEnvelope {
+  readonly schemaVersion: typeof appPreferencesSchemaVersion;
+  readonly preferences: unknown;
+  readonly migrated: boolean;
+}
+
+class UnsupportedPreferencesSchemaError extends Error {}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * Runs one ordered step per persisted schema version. New migrations must be appended instead of
+ * changing old steps so an installation can upgrade across several skipped releases in one run.
+ */
+export function migratePreferencesEnvelope(raw: unknown): MigratedPreferencesEnvelope {
+  if (!isRecord(raw)) throw new Error('The preferences envelope is invalid.');
+
+  const originalVersion = 'schemaVersion' in raw ? raw.schemaVersion : 0;
+  if (!Number.isInteger(originalVersion) || (originalVersion as number) < 0) {
+    throw new Error('The preferences schema version is invalid.');
+  }
+  if ((originalVersion as number) > appPreferencesSchemaVersion) {
+    throw new UnsupportedPreferencesSchemaError(
+      'The preferences file was created by a newer application version.',
+    );
+  }
+
+  let version = originalVersion as number;
+  const preferences: unknown = 'preferences' in raw ? raw.preferences : raw;
+
+  while (version < appPreferencesSchemaVersion) {
+    switch (version) {
+      case 0:
+        // Version 0 was the pre-envelope shape. Its preference keys already match schema 1.
+        version = 1;
+        break;
+      default:
+        throw new Error(`No preferences migration exists from schema ${version}.`);
+    }
+  }
+
+  if (preferences === undefined) throw new Error('The preferences payload is missing.');
+  return {
+    schemaVersion: appPreferencesSchemaVersion,
+    preferences,
+    migrated: originalVersion !== appPreferencesSchemaVersion,
+  };
+}
+
 /** Preferences are tiny, so an fsynced temp file plus atomic rename is simpler than another DB. */
 export class JsonPreferencesRepository implements PreferencesRepository {
   private readonly filePath: string;
@@ -50,23 +101,22 @@ export class JsonPreferencesRepository implements PreferencesRepository {
   private async load(): Promise<AppPreferences> {
     try {
       const raw = JSON.parse(await readFile(this.filePath, 'utf8')) as unknown;
-      if (
-        typeof raw !== 'object' ||
-        raw === null ||
-        !('schemaVersion' in raw) ||
-        raw.schemaVersion !== appPreferencesSchemaVersion ||
-        !('preferences' in raw)
-      ) {
-        throw new Error('The preferences envelope is invalid.');
+      const envelope = migratePreferencesEnvelope(raw);
+      const parsed = parseAppPreferencesDto(envelope.preferences);
+      if (envelope.migrated) {
+        await this.writeAtomically(parsed);
+        this.logger.info('Saved preferences were migrated.', {
+          schemaVersion: envelope.schemaVersion,
+        });
       }
-
-      const parsed = parseAppPreferencesDto(raw.preferences);
       this.current = Object.freeze({
         ...parsed,
         shortcuts: Object.freeze({ ...parsed.shortcuts }),
       });
       return this.current;
     } catch (error) {
+      // Never quarantine or overwrite valid data from a newer app during a downgrade.
+      if (error instanceof UnsupportedPreferencesSchemaError) throw error;
       if (this.isMissingFile(error)) {
         this.current = defaultAppPreferences;
         return this.current;

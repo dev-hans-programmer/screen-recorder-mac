@@ -1,4 +1,4 @@
-import { constants, accessSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { constants, accessSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
@@ -22,6 +22,7 @@ function findPackagedApp() {
 
 const appPath = findPackagedApp();
 if (!appPath) throw new Error('Packaged app not found. Run “pnpm package” first.');
+const expectedVersion = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8')).version;
 
 const resources = path.join(appPath, 'Contents/Resources');
 const asarPath = path.join(resources, 'app.asar');
@@ -34,15 +35,44 @@ if (!existsSync(helperPath) || !statSync(helperPath).isFile()) {
 }
 accessSync(helperPath, constants.X_OK);
 
-const iconNameResult = spawnSync(
-  '/usr/libexec/PlistBuddy',
-  ['-c', 'Print :CFBundleIconFile', infoPlistPath],
-  { encoding: 'utf8' },
-);
-if (iconNameResult.status !== 0) {
-  throw new Error(iconNameResult.stderr || 'The packaged app icon is not declared.');
+function plistValue(key) {
+  const result = spawnSync('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, infoPlistPath], {
+    encoding: 'utf8',
+  });
+  if (result.status !== 0)
+    throw new Error(result.stderr || `Unable to read ${key} from Info.plist.`);
+  return result.stdout.trim();
 }
-const declaredIconName = iconNameResult.stdout.trim();
+
+const bundleVersion = plistValue('CFBundleShortVersionString');
+const buildVersion = plistValue('CFBundleVersion');
+if (bundleVersion !== expectedVersion || buildVersion !== expectedVersion) {
+  throw new Error(
+    `Packaged version mismatch: expected=${expectedVersion} bundle=${bundleVersion} build=${buildVersion}`,
+  );
+}
+
+const helperHandshake = spawnSync(helperPath, [], {
+  encoding: 'utf8',
+  input: `${JSON.stringify({
+    protocolVersion: 1,
+    requestId: 'package-version-check',
+    command: 'hello',
+    payload: { clientVersion: expectedVersion },
+  })}\n`,
+  timeout: 5_000,
+});
+if (helperHandshake.status !== 0) {
+  throw new Error(helperHandshake.stderr || 'Packaged CaptureService handshake failed.');
+}
+const helperResponse = JSON.parse(helperHandshake.stdout.trim().split('\n')[0]);
+if (helperResponse.serviceVersion !== expectedVersion) {
+  throw new Error(
+    `Packaged helper version mismatch: expected=${expectedVersion} helper=${String(helperResponse.serviceVersion)}`,
+  );
+}
+
+const declaredIconName = plistValue('CFBundleIconFile');
 const iconFileName =
   path.extname(declaredIconName) === '' ? `${declaredIconName}.icns` : declaredIconName;
 const iconPath = path.join(resources, iconFileName);
@@ -76,6 +106,8 @@ process.stdout.write(
   `${JSON.stringify(
     {
       appPath,
+      applicationVersion: bundleVersion,
+      nativeServiceVersion: helperResponse.serviceVersion,
       asarPresent: true,
       helperOutsideAsar: true,
       helperExecutable: true,

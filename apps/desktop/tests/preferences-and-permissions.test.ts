@@ -83,6 +83,43 @@ describe('JSON preferences repository', () => {
     expect(await readdir(directory)).toEqual(['preferences.json.corrupt-42']);
     expect(logger.warn).toHaveBeenCalledOnce();
   });
+
+  it('migrates pre-envelope preferences without losing user choices', async () => {
+    const directory = await temporaryDirectory();
+    const filePath = path.join(directory, 'preferences.json');
+    const legacyPreferences = updateAppPreferences(defaultAppPreferences, {
+      outputDirectory: '/Users/tester/Movies/Important Recordings',
+      defaultProfileId: 'master',
+      microphoneEnabled: true,
+      onboardingCompleted: true,
+    });
+    await writeFile(filePath, `${JSON.stringify(legacyPreferences)}\n`, 'utf8');
+
+    const restored = await new JsonPreferencesRepository({ filePath, logger }).get();
+    const migrated = JSON.parse(await readFile(filePath, 'utf8')) as {
+      schemaVersion: number;
+      preferences: unknown;
+    };
+
+    expect(restored).toEqual(legacyPreferences);
+    expect(migrated).toEqual({ schemaVersion: 1, preferences: legacyPreferences });
+    expect(logger.info).toHaveBeenCalledWith('Saved preferences were migrated.', {
+      schemaVersion: 1,
+    });
+  });
+
+  it('preserves preferences written by a newer app instead of downgrading them', async () => {
+    const directory = await temporaryDirectory();
+    const filePath = path.join(directory, 'preferences.json');
+    const futureEnvelope = { schemaVersion: 99, preferences: defaultAppPreferences };
+    await writeFile(filePath, `${JSON.stringify(futureEnvelope)}\n`, 'utf8');
+
+    const repository = new JsonPreferencesRepository({ filePath, logger });
+
+    await expect(repository.get()).rejects.toThrow('newer application version');
+    expect(JSON.parse(await readFile(filePath, 'utf8'))).toEqual(futureEnvelope);
+    expect(await readdir(directory)).toEqual(['preferences.json']);
+  });
 });
 
 describe('macOS permission recovery', () => {

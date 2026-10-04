@@ -1,7 +1,7 @@
 import Foundation
 
 let nativeProtocolVersion = 1
-let nativeServiceVersion = "0.1.0"
+let nativeServiceVersion = "0.1.3"
 
 enum JSONValue: Codable, Equatable, Sendable {
   case object([String: JSONValue])

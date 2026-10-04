@@ -82,7 +82,11 @@ describe('CaptureServiceClient', () => {
   it('correlates responses and parses unsolicited native events', async () => {
     const helper = new FakeHelperProcess();
     const events: unknown[] = [];
-    const client = createClient(helper, { onEvent: (event) => events.push(event) });
+    const serviceVersions: string[] = [];
+    const client = createClient(helper, {
+      onEvent: (event) => events.push(event),
+      onServiceVersion: (version) => serviceVersions.push(version),
+    });
 
     await expect(client.request('getHealth')).resolves.toEqual({ ready: true });
     helper.stdout.write(
@@ -97,6 +101,7 @@ describe('CaptureServiceClient', () => {
 
     await vi.waitFor(() => expect(events).toHaveLength(1));
     expect(events[0]).toMatchObject({ eventId: 'event-1', type: 'recording.progress' });
+    expect(serviceVersions).toEqual(['0.1.0', '0.1.0', '0.1.0']);
     await client.dispose();
     expect(helper.killed).toBe(true);
   });

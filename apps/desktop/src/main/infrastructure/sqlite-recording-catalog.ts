@@ -46,6 +46,44 @@ interface RecordingRow {
 
 class UnsupportedMetadataSchemaError extends Error {}
 
+interface RecordingCatalogMigration {
+  readonly toVersion: number;
+  apply(database: DatabaseSync): void;
+}
+
+const recordingCatalogMigrations: readonly RecordingCatalogMigration[] = [
+  {
+    toVersion: 1,
+    apply(database) {
+      database.exec(`
+        CREATE TABLE recordings (
+          id TEXT PRIMARY KEY NOT NULL,
+          schema_version INTEGER NOT NULL,
+          file_path TEXT NOT NULL,
+          title TEXT NOT NULL,
+          created_at REAL NOT NULL,
+          duration_ms REAL NOT NULL,
+          width INTEGER NOT NULL,
+          height INTEGER NOT NULL,
+          frame_rate INTEGER NOT NULL,
+          profile_id TEXT NOT NULL,
+          codec TEXT NOT NULL,
+          has_system_audio INTEGER NOT NULL,
+          has_microphone INTEGER NOT NULL,
+          file_size_bytes REAL NOT NULL,
+          availability TEXT NOT NULL,
+          failure_reason TEXT,
+          failure_occurred_at REAL,
+          failure_recoverable INTEGER,
+          recovered_at REAL,
+          original_file_path TEXT
+        ) STRICT;
+        CREATE INDEX recordings_created_at_idx ON recordings(created_at DESC);
+      `);
+    },
+  },
+];
+
 /** SQLite owns only metadata; recordings remain regular user-visible media files. */
 export class SqliteRecordingCatalog implements RecordingCatalogRepository {
   private readonly database: DatabaseSync;
@@ -227,35 +265,29 @@ export class SqliteRecordingCatalog implements RecordingCatalogRepository {
       throw new UnsupportedMetadataSchemaError('The recording catalog was created by a newer app.');
     }
 
-    if (version === 0) {
-      database.exec(`
-        BEGIN IMMEDIATE;
-        CREATE TABLE recordings (
-          id TEXT PRIMARY KEY NOT NULL,
-          schema_version INTEGER NOT NULL,
-          file_path TEXT NOT NULL,
-          title TEXT NOT NULL,
-          created_at REAL NOT NULL,
-          duration_ms REAL NOT NULL,
-          width INTEGER NOT NULL,
-          height INTEGER NOT NULL,
-          frame_rate INTEGER NOT NULL,
-          profile_id TEXT NOT NULL,
-          codec TEXT NOT NULL,
-          has_system_audio INTEGER NOT NULL,
-          has_microphone INTEGER NOT NULL,
-          file_size_bytes REAL NOT NULL,
-          availability TEXT NOT NULL,
-          failure_reason TEXT,
-          failure_occurred_at REAL,
-          failure_recoverable INTEGER,
-          recovered_at REAL,
-          original_file_path TEXT
-        ) STRICT;
-        CREATE INDEX recordings_created_at_idx ON recordings(created_at DESC);
-        PRAGMA user_version = ${recordingMetadataSchemaVersion};
-        COMMIT;
-      `);
+    let migratedVersion = version;
+    for (const migration of recordingCatalogMigrations) {
+      if (migration.toVersion <= migratedVersion) continue;
+      if (migration.toVersion !== migratedVersion + 1) {
+        throw new Error(`Recording catalog migration ${migratedVersion + 1} is missing.`);
+      }
+
+      database.exec('BEGIN IMMEDIATE');
+      try {
+        migration.apply(database);
+        database.exec(`PRAGMA user_version = ${migration.toVersion}`);
+        database.exec('COMMIT');
+        migratedVersion = migration.toVersion;
+      } catch (error) {
+        database.exec('ROLLBACK');
+        throw error;
+      }
+    }
+
+    if (migratedVersion !== recordingMetadataSchemaVersion) {
+      throw new Error(
+        `Recording catalog migration ended at ${migratedVersion}, expected ${recordingMetadataSchemaVersion}.`,
+      );
     }
   }
 

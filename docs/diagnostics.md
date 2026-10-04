@@ -52,7 +52,7 @@ measurement does not add another high-frequency timer. Up to 50 recent summaries
 Settings → Support diagnostics opens a native save dialog and exports a formatted JSON report. It
 contains:
 
-- App, Electron, Node, capture-protocol, and macOS versions.
+- App, Electron, React, Node, expected/observed Swift helper, capture-protocol, and macOS versions.
 - CPU architecture/model, logical CPU count, and total memory.
 - Up to 50 recent redacted errors.
 - Up to 20 recent path-free recording performance summaries.

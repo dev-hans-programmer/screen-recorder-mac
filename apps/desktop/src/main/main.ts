@@ -97,7 +97,11 @@ function createMainWindow(): void {
       getMainWindow: () => mainWindow,
       onWarning: (message) => logger.warn(message),
     });
-    const diagnosticsReport = new ElectronDiagnosticsReport({ logger });
+    let observedNativeServiceVersion: string | undefined;
+    const diagnosticsReport = new ElectronDiagnosticsReport({
+      logger,
+      getNativeServiceVersion: () => observedNativeServiceVersion,
+    });
     const recordingDirectoryPicker = new ElectronRecordingDirectoryPicker({
       getParentWindow: () => mainWindow,
     });
@@ -132,6 +136,16 @@ function createMainWindow(): void {
         diagnosticsFilePath: path.join(app.getPath('userData'), 'diagnostics', 'recordings.json'),
         diagnosticsReport,
         recordingDirectoryPicker,
+        onNativeServiceVersion: (version) => {
+          if (observedNativeServiceVersion === version) return;
+          observedNativeServiceVersion = version;
+          if (version !== app.getVersion()) {
+            logger.warn('Native CaptureService version differs from the application version.', {
+              applicationVersion: app.getVersion(),
+              nativeServiceVersion: version,
+            });
+          }
+        },
       },
       logger,
     );

@@ -34,8 +34,9 @@ Open a workflow run in GitHub and download the artifact named
 - Universal 2 ZIP.
 - `SHA256SUMS`.
 
-Build metadata is uploaded separately for 30 days. It records the commit, app version, Node, pnpm,
-Swift, Xcode and macOS versions, lockfile hash, signing mode, artifact sizes, and SHA-256 hashes. Logs
+Build metadata is uploaded separately for 30 days. It records the commit, app, Electron, React and
+native-helper versions, Node, pnpm, Swift, Xcode and macOS versions, lockfile hash, signing mode,
+artifact sizes, and SHA-256 hashes. Logs
 from a failed quality, package, or release job are retained for seven days.
 
 ## Tagged releases

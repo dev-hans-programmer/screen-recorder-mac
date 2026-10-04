@@ -134,6 +134,7 @@ describe('diagnostics report export', () => {
         ],
       },
       now: () => 1_798_588_800_000,
+      getNativeServiceVersion: () => '0.1.3',
     });
 
     await expect(report.exportReport([recordingDiagnostics()])).resolves.toBe(reportPath);
@@ -141,9 +142,15 @@ describe('diagnostics report export', () => {
     const serialized = JSON.stringify(exported);
 
     expect(exported).toMatchObject({
-      reportVersion: 1,
+      reportVersion: 2,
       privacy: { includesRecordingContent: false, includesRecordingFilePaths: false },
       application: { name: 'Screen Recorder', version: '0.1.0' },
+      runtimes: { reactVersion: '19.3.0' },
+      nativeService: {
+        expectedVersion: '0.1.3',
+        observedVersion: '0.1.3',
+        protocolVersion: 1,
+      },
       system: { operatingSystem: 'macOS' },
     });
     expect(serialized).toContain('actualFrameCount');

@@ -68,6 +68,11 @@ jobs:
           set -o pipefail
           pnpm native:build 2>&1 | tee .ci/logs/native-build.log
 
+      - name: Verify release component versions
+        run: |
+          set -o pipefail
+          pnpm version:check 2>&1 | tee .ci/logs/version-check.log
+
       - name: Type check
         run: |
           set -o pipefail

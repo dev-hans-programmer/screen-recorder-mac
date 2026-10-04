@@ -1,6 +1,9 @@
+import desktopPackage from '../../package.json';
+
 export const appMetadata = Object.freeze({
   name: 'Screen Recorder',
-  version: '0.1.3',
-  phase: 'Phase 8 · Recording controls',
+  version: desktopPackage.version,
+  nativeServiceVersion: desktopPackage.version,
+  phase: 'Phase 15 · Release readiness',
   platform: 'macOS 15+',
 });

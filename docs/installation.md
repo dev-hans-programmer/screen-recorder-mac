@@ -7,7 +7,7 @@ Phase 13 artifacts support macOS 15 or newer and contain both Apple Silicon and 
 Download the DMG or ZIP together with `SHA256SUMS`. Calculate the artifact hash:
 
 ```bash
-shasum -a 256 "/path/to/Screen Recorder-0.1.0-universal.dmg"
+shasum -a 256 "/path/to/Screen Recorder-<version>-universal.dmg"
 ```
 
 Confirm that the result exactly matches the artifact's line in `SHA256SUMS`. If the CI download
