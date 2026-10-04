@@ -13,14 +13,17 @@ Versions follow semantic versioning while the application is pre-1.0.
   guides.
 - React, Electron, Node, application, native-helper, protocol, and macOS versions in support
   diagnostics.
+- Fullscreen editor playback with persistent transport controls and Escape-to-exit support.
 
 ### Changed
 
 - Reworked the application into a quieter, preview-first macOS studio with reduced visual chrome.
 - Replaced the Recorder marketing hero and competing cards with a capture stage, source-type strip,
   unified inspector, docked record action, and compact recording HUD.
-- Refined Library, Settings, and Editor surfaces around the same spacing, material, hierarchy, and
-  responsive design system.
+- Rebuilt Library as a native-style media browser with smart collections, keyboard selection,
+  responsive grid/list views, and a recording inspector for playback and file actions.
+- Refined Settings and Editor surfaces around the same spacing, material, hierarchy, and responsive
+  design system.
 
 ## 0.1.3 - 2026-10-04
 

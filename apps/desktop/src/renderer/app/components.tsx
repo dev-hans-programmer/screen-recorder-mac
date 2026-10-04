@@ -20,6 +20,8 @@ type IconName =
   | 'chevron-right'
   | 'circle'
   | 'folder'
+  | 'fullscreen'
+  | 'fullscreen-exit'
   | 'grid'
   | 'list'
   | 'more'
@@ -44,6 +46,8 @@ const iconPaths: Record<IconName, string> = {
   'chevron-right': 'm9 18 6-6-6-6',
   circle: 'M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z',
   folder: 'M3.5 6.5h6l2 2h9v9.5h-17V6.5Z',
+  fullscreen: 'M8 3H3v5m13-5h5v5M8 21H3v-5m13 5h5v-5',
+  'fullscreen-exit': 'M3 8h5V3m13 5h-5V3M3 16h5v5m13-5h-5v5',
   grid: 'M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z',
   list: 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
@@ -324,9 +328,11 @@ export function Tooltip({
 export function Menu({
   label,
   children,
+  iconOnly = false,
 }: {
   readonly label: string;
   readonly children: ReactNode;
+  readonly iconOnly?: boolean;
 }) {
   const menuId = useId();
   const triggerId = `${menuId}-trigger`;
@@ -394,7 +400,8 @@ export function Menu({
         aria-controls={open ? menuId : undefined}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="button button-secondary menu-trigger"
+        aria-label={iconOnly ? label : undefined}
+        className={`button button-secondary menu-trigger ${iconOnly ? 'is-icon-only' : ''}`}
         id={triggerId}
         type="button"
         onClick={() => {
@@ -402,8 +409,14 @@ export function Menu({
           setOpen((current) => !current);
         }}
       >
-        <span>{label}</span>
-        <Icon name="chevron-right" size={14} />
+        {iconOnly ? (
+          <Icon name="more" size={16} />
+        ) : (
+          <>
+            <span>{label}</span>
+            <Icon name="chevron-right" size={14} />
+          </>
+        )}
       </button>
       {open &&
         createPortal(

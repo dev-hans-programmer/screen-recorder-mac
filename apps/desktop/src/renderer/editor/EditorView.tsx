@@ -55,6 +55,7 @@ function RecordingEditor({
   readonly store: RendererStore;
 }): ReactElement {
   const operation = useRendererSelector(store, (state) => state.operation);
+  const canvasPanelRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
@@ -69,6 +70,7 @@ function RecordingEditor({
   const [posterTimeMs, setPosterTimeMs] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('frame');
 
   const dimensions = useMemo(
@@ -101,6 +103,14 @@ function RecordingEditor({
     };
   }, [recording.id, store]);
 
+  useEffect(() => {
+    const handleFullscreenChange = (): void => {
+      setIsFullscreen(document.fullscreenElement === canvasPanelRef.current);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
   function seekTo(milliseconds: number): void {
     const next = Math.min(recording.durationMs, Math.max(0, milliseconds));
     setCurrentMs(next);
@@ -127,6 +137,21 @@ function RecordingEditor({
     }
   }
 
+  async function toggleFullscreen(): Promise<void> {
+    try {
+      if (document.fullscreenElement === canvasPanelRef.current) {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      } else {
+        await canvasPanelRef.current?.requestFullscreen();
+        setIsFullscreen(true);
+      }
+      setLocalError(null);
+    } catch {
+      setLocalError('Fullscreen playback could not start.');
+    }
+  }
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
       const target = event.target as HTMLElement | null;
@@ -140,6 +165,8 @@ function RecordingEditor({
       } else if (event.key === 'ArrowRight') {
         event.preventDefault();
         seekTo(currentMs + (event.shiftKey ? 5_000 : 500));
+      } else if (event.key === 'Escape') {
+        setIsFullscreen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -280,7 +307,7 @@ function RecordingEditor({
       )}
 
       <div className="editor-stage-layout">
-        <main className="editor-canvas-panel">
+        <main ref={canvasPanelRef} className="editor-canvas-panel">
           <div className="editor-canvas-toolbar">
             <span>Canvas</span>
             <div>
@@ -370,9 +397,20 @@ function RecordingEditor({
                 +5s
               </button>
             </div>
-            <span className="editor-timecode editor-timecode-end">
-              {formatEditorTime(recording.durationMs)}
-            </span>
+            <div className="editor-transport-end">
+              <span className="editor-timecode editor-timecode-end">
+                {formatEditorTime(recording.durationMs)}
+              </span>
+              <button
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                className="editor-fullscreen-button"
+                title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                type="button"
+                onClick={() => void toggleFullscreen()}
+              >
+                <Icon name={isFullscreen ? 'fullscreen-exit' : 'fullscreen'} size={17} />
+              </button>
+            </div>
           </div>
         </main>
 

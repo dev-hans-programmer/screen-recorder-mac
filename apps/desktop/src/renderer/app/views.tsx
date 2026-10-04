@@ -663,17 +663,25 @@ export function LibraryView({ store }: { readonly store: RendererStore }) {
   const recordings = useRendererSelector(store, (state) => state.recordings);
   const operation = useRendererSelector(store, (state) => state.operation);
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
+  const [collection, setCollection] = useState<'all' | 'recent' | 'uhd' | 'missing'>('all');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<'newest' | 'oldest' | 'name' | 'duration' | 'size'>('newest');
   const [renameTarget, setRenameTarget] = useState<RecordingMetadataDto | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<RecordingMetadataDto | null>(null);
+  const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [renderedCount, setRenderedCount] = useState(80);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const visibleRecordings = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const filtered = recordings.filter((recording) => {
+      const collectionMatches =
+        collection === 'all' ||
+        (collection === 'recent' && recording.createdAt >= Date.now() - 7 * 24 * 60 * 60 * 1000) ||
+        (collection === 'uhd' && (recording.width >= 3840 || recording.height >= 2160)) ||
+        (collection === 'missing' && recording.availability === 'missing');
+      if (!collectionMatches) return false;
       if (normalizedQuery.length === 0) return true;
       return [recording.title, recording.codec, recording.profileId]
         .join(' ')
@@ -688,9 +696,17 @@ export function LibraryView({ store }: { readonly store: RendererStore }) {
       if (sort === 'size') return right.fileSizeBytes - left.fileSizeBytes;
       return right.createdAt - left.createdAt;
     });
-  }, [query, recordings, sort]);
+  }, [collection, query, recordings, sort]);
 
-  useEffect(() => setRenderedCount(80), [query, recordings, sort]);
+  useEffect(() => setRenderedCount(80), [collection, query, recordings, sort]);
+  useEffect(() => {
+    if (
+      selectedRecordingId === null ||
+      !visibleRecordings.some((recording) => recording.id === selectedRecordingId)
+    ) {
+      setSelectedRecordingId(visibleRecordings[0]?.id ?? null);
+    }
+  }, [selectedRecordingId, visibleRecordings]);
   useEffect(() => {
     const target = loadMoreRef.current;
     if (target === null || renderedCount >= visibleRecordings.length) return;
@@ -728,106 +744,289 @@ export function LibraryView({ store }: { readonly store: RendererStore }) {
     );
   }
 
+  const selectedRecording =
+    recordings.find((recording) => recording.id === selectedRecordingId) ?? null;
+  const collectionCounts = {
+    all: recordings.length,
+    recent: recordings.filter(
+      (recording) => recording.createdAt >= Date.now() - 7 * 24 * 60 * 60 * 1000,
+    ).length,
+    uhd: recordings.filter((recording) => recording.width >= 3840 || recording.height >= 2160)
+      .length,
+    missing: recordings.filter((recording) => recording.availability === 'missing').length,
+  } as const;
+  const collectionTitle =
+    collection === 'all'
+      ? 'All Recordings'
+      : collection === 'recent'
+        ? 'Recent'
+        : collection === 'uhd'
+          ? '4K Recordings'
+          : 'Missing Files';
+
   return (
-    <div className="view-stack">
-      <div className="library-summary">
-        <div>
-          <div className="section-eyebrow">
-            <span className="eyebrow-line" /> Recent captures
-          </div>
-          <h2>
-            {recordings.length} recording{recordings.length === 1 ? '' : 's'}
-          </h2>
-        </div>
-        <div className="library-header-actions">
-          <Button icon="activity" variant="ghost" onClick={() => void store.refreshRecordings()}>
-            Refresh
-          </Button>
-          <Button
-            icon="folder"
-            variant="secondary"
-            onClick={() => void store.openRecordingsFolder()}
-          >
-            Open recordings folder
-          </Button>
-        </div>
-      </div>
-      <div className="library-toolbar">
-        <label className="library-search">
-          <Icon name="search" size={16} />
-          <span className="visually-hidden">Search recordings</span>
-          <input
-            placeholder="Search recordings"
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <label className="library-sort">
-          <span>Sort</span>
-          <select
-            aria-label="Sort recordings"
-            value={sort}
-            onChange={(event) => setSort(event.target.value as typeof sort)}
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="name">Name</option>
-            <option value="duration">Duration</option>
-            <option value="size">File size</option>
-          </select>
-        </label>
-        <div className="library-layout-toggle" aria-label="Library layout" role="group">
-          <Button
-            aria-label="Grid view"
-            aria-pressed={layout === 'grid'}
-            icon="grid"
-            variant="icon"
-            onClick={() => setLayout('grid')}
-          />
-          <Button
-            aria-label="List view"
-            aria-pressed={layout === 'list'}
-            icon="list"
-            variant="icon"
-            onClick={() => setLayout('list')}
-          />
-        </div>
-      </div>
-      {visibleRecordings.length === 0 ? (
-        <EmptyState
-          icon="search"
-          title="No matching recordings"
-          description="Try a different name, codec, or quality profile."
-        />
-      ) : (
-        <section
-          className={`library-grid ${layout === 'list' ? 'is-list' : ''}`}
-          aria-label="Recordings"
-        >
-          {visibleRecordings.slice(0, renderedCount).map((recording) => (
-            <RecordingCard
-              key={recording.id}
-              layout={layout}
-              recording={recording}
-              store={store}
-              onDelete={() => setDeleteTarget(recording)}
-              onRename={() => {
-                setRenameTarget(recording);
-                setRenameTitle(recording.title);
-              }}
-            />
+    <div className="view-stack library-view-stack">
+      <div className="library-browser">
+        <aside className="library-collections" aria-label="Library collections">
+          <div className="library-collections-heading">Library</div>
+          {(
+            [
+              ['all', 'archive', 'All Recordings'],
+              ['recent', 'activity', 'Recent'],
+              ['uhd', 'monitor', '4K Recordings'],
+              ['missing', 'folder', 'Missing Files'],
+            ] as const
+          ).map(([value, icon, label]) => (
+            <button
+              aria-current={collection === value ? 'page' : undefined}
+              className={collection === value ? 'is-selected' : ''}
+              key={value}
+              type="button"
+              onClick={() => setCollection(value)}
+            >
+              <Icon name={icon} size={15} />
+              <span>{label}</span>
+              <small>{collectionCounts[value]}</small>
+            </button>
           ))}
-          {renderedCount < visibleRecordings.length && (
-            <div
-              ref={loadMoreRef}
-              aria-label={`Loading more recordings; ${renderedCount} of ${visibleRecordings.length} shown`}
-              className="library-load-more"
-              role="status"
-            />
-          )}
+          <div className="library-collections-spacer" />
+          <button type="button" onClick={() => void store.openRecordingsFolder()}>
+            <Icon name="folder" size={15} />
+            <span>Show in Finder</span>
+          </button>
+        </aside>
+
+        <section className="library-browser-content">
+          <header className="library-native-toolbar">
+            <div className="library-native-title">
+              <h2>{collectionTitle}</h2>
+              <span>
+                {visibleRecordings.length} {visibleRecordings.length === 1 ? 'item' : 'items'}
+              </span>
+            </div>
+            <div className="library-native-actions">
+              <label className="library-search">
+                <Icon name="search" size={15} />
+                <span className="visually-hidden">Search recordings</span>
+                <input
+                  placeholder="Search"
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </label>
+              <label className="library-sort">
+                <span className="visually-hidden">Sort</span>
+                <select
+                  aria-label="Sort recordings"
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as typeof sort)}
+                >
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
+                  <option value="name">Name</option>
+                  <option value="duration">Duration</option>
+                  <option value="size">File size</option>
+                </select>
+              </label>
+              <div className="library-layout-toggle" aria-label="Library layout" role="group">
+                <Button
+                  aria-label="Grid view"
+                  aria-pressed={layout === 'grid'}
+                  icon="grid"
+                  variant="icon"
+                  onClick={() => setLayout('grid')}
+                />
+                <Button
+                  aria-label="List view"
+                  aria-pressed={layout === 'list'}
+                  icon="list"
+                  variant="icon"
+                  onClick={() => setLayout('list')}
+                />
+              </div>
+              <Button
+                aria-label="Refresh library"
+                icon="activity"
+                variant="icon"
+                onClick={() => void store.refreshRecordings()}
+              />
+            </div>
+          </header>
+
+          <div className="library-items-scroll">
+            {visibleRecordings.length === 0 ? (
+              <EmptyState
+                icon={collection === 'missing' ? 'folder' : 'search'}
+                title={collection === 'missing' ? 'No missing files' : 'No matching recordings'}
+                description={
+                  collection === 'missing'
+                    ? 'Everything in your library is available.'
+                    : 'Try another collection, name, codec, or quality profile.'
+                }
+              />
+            ) : (
+              <section
+                aria-label="Recordings"
+                className={`library-grid ${layout === 'list' ? 'is-list' : ''}`}
+                role="listbox"
+                onKeyDown={(event) => {
+                  if ((event.target as HTMLElement).closest('button, input, select')) return;
+                  const currentIndex = Math.max(
+                    0,
+                    visibleRecordings.findIndex(
+                      (recording) => recording.id === selectedRecordingId,
+                    ),
+                  );
+                  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    setSelectedRecordingId(
+                      visibleRecordings[Math.min(currentIndex + 1, visibleRecordings.length - 1)]
+                        ?.id ?? null,
+                    );
+                  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    setSelectedRecordingId(
+                      visibleRecordings[Math.max(currentIndex - 1, 0)]?.id ?? null,
+                    );
+                  } else if ((event.key === 'Enter' || event.key === ' ') && selectedRecording) {
+                    event.preventDefault();
+                    if (selectedRecording.availability !== 'missing') {
+                      void store.openRecording(selectedRecording.id);
+                    }
+                  }
+                }}
+              >
+                {visibleRecordings.slice(0, renderedCount).map((recording) => (
+                  <RecordingCard
+                    key={recording.id}
+                    layout={layout}
+                    recording={recording}
+                    selected={recording.id === selectedRecordingId}
+                    store={store}
+                    onDelete={() => setDeleteTarget(recording)}
+                    onRename={() => {
+                      setRenameTarget(recording);
+                      setRenameTitle(recording.title);
+                    }}
+                    onSelect={() => setSelectedRecordingId(recording.id)}
+                  />
+                ))}
+                {renderedCount < visibleRecordings.length && (
+                  <div
+                    ref={loadMoreRef}
+                    aria-label={`Loading more recordings; ${renderedCount} of ${visibleRecordings.length} shown`}
+                    className="library-load-more"
+                    role="status"
+                  />
+                )}
+              </section>
+            )}
+          </div>
         </section>
-      )}
+
+        <aside className="library-inspector" aria-label="Selected recording details">
+          {selectedRecording === null ? (
+            <div className="library-inspector-empty">
+              <Icon name="archive" size={22} />
+              <span>Select a recording</span>
+            </div>
+          ) : (
+            <>
+              <div className="library-inspector-preview">
+                <RecordingThumbnail recording={selectedRecording} store={store} />
+                <button
+                  aria-label={`Play ${selectedRecording.title}`}
+                  disabled={selectedRecording.availability === 'missing'}
+                  type="button"
+                  onClick={() => void store.openRecording(selectedRecording.id)}
+                >
+                  <Icon name="play" size={21} />
+                </button>
+              </div>
+              <div className="library-inspector-body">
+                <span className="library-inspector-kicker">Recording</span>
+                <h3>{selectedRecording.title || 'Untitled recording'}</h3>
+                <p>{formatDate(selectedRecording.createdAt)}</p>
+                <div className="library-inspector-actions">
+                  <Button
+                    disabled={selectedRecording.availability === 'missing'}
+                    icon="play"
+                    variant="primary"
+                    onClick={() => void store.openRecording(selectedRecording.id)}
+                  >
+                    Play
+                  </Button>
+                  <Button
+                    disabled={selectedRecording.availability === 'missing'}
+                    icon="edit"
+                    variant="secondary"
+                    onClick={() => store.openEditor(selectedRecording.id)}
+                  >
+                    Edit
+                  </Button>
+                </div>
+                <dl className="library-inspector-details">
+                  <div>
+                    <dt>Duration</dt>
+                    <dd>{formatDuration(selectedRecording.durationMs)}</dd>
+                  </div>
+                  <div>
+                    <dt>Dimensions</dt>
+                    <dd>
+                      {selectedRecording.width} × {selectedRecording.height}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Frame rate</dt>
+                    <dd>{selectedRecording.frameRate} FPS</dd>
+                  </div>
+                  <div>
+                    <dt>Codec</dt>
+                    <dd>
+                      {selectedRecording.codec === 'prores422'
+                        ? 'ProRes 422'
+                        : selectedRecording.codec.toUpperCase()}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Size</dt>
+                    <dd>{formatBytes(selectedRecording.fileSizeBytes)}</dd>
+                  </div>
+                  <div>
+                    <dt>Status</dt>
+                    <dd>
+                      {selectedRecording.availability === 'missing' ? 'Missing file' : 'Available'}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="library-inspector-secondary-actions">
+                  <Button
+                    disabled={selectedRecording.availability === 'missing'}
+                    variant="ghost"
+                    onClick={() => {
+                      setRenameTarget(selectedRecording);
+                      setRenameTitle(selectedRecording.title);
+                    }}
+                  >
+                    Rename
+                  </Button>
+                  <Button
+                    disabled={selectedRecording.availability === 'missing'}
+                    variant="ghost"
+                    onClick={() => void store.revealRecording(selectedRecording.id)}
+                  >
+                    Reveal
+                  </Button>
+                  <Button variant="ghost" onClick={() => setDeleteTarget(selectedRecording)}>
+                    {selectedRecording.availability === 'missing' ? 'Remove' : 'Trash'}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </aside>
+      </div>
 
       <Dialog
         description="The media file and library title will be updated together."
@@ -906,20 +1105,37 @@ export function LibraryView({ store }: { readonly store: RendererStore }) {
 function RecordingCard({
   recording,
   layout,
+  selected,
   store,
+  onSelect,
   onRename,
   onDelete,
 }: {
   readonly recording: RecordingMetadataDto;
   readonly layout: 'grid' | 'list';
+  readonly selected: boolean;
   readonly store: RendererStore;
+  readonly onSelect: () => void;
   readonly onRename: () => void;
   readonly onDelete: () => void;
 }) {
   const missing = recording.availability === 'missing';
 
   return (
-    <article className={`recording-card ${missing ? 'is-missing' : ''}`}>
+    <article
+      aria-label={recording.title || 'Untitled recording'}
+      aria-selected={selected}
+      className={`recording-card ${selected ? 'is-selected' : ''} ${missing ? 'is-missing' : ''}`}
+      role="option"
+      tabIndex={selected ? 0 : -1}
+      onClick={(event) => {
+        onSelect();
+        event.currentTarget.focus();
+      }}
+      onDoubleClick={() => {
+        if (!missing) void store.openRecording(recording.id);
+      }}
+    >
       <div className="recording-thumbnail">
         <RecordingThumbnail recording={recording} store={store} />
         <button
@@ -936,7 +1152,7 @@ function RecordingCard({
       <div className="recording-card-body">
         <div className="recording-card-title">
           <h3>{recording.title || 'Untitled recording'}</h3>
-          <Menu label="Actions">
+          <Menu iconOnly label={`Actions for ${recording.title || 'Untitled recording'}`}>
             <MenuItem disabled={missing} onSelect={() => void store.openRecording(recording.id)}>
               Open
             </MenuItem>
