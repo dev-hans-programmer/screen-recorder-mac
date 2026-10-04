@@ -188,16 +188,15 @@ export function Sidebar({
     <aside className="sidebar" aria-label="Primary navigation">
       <div className="brand window-drag-region">
         <div className="brand-mark">
-          <Icon name="sparkles" size={17} />
+          <span className="brand-record-dot" />
         </div>
         <div>
           <div className="brand-name">Capture</div>
-          <div className="brand-subtitle">Screen Recorder</div>
+          <div className="brand-subtitle">Studio</div>
         </div>
       </div>
 
       <nav className="main-nav">
-        <div className="nav-heading">Workspace</div>
         <NavItem
           activeScreen={activeScreen}
           icon="monitor"
@@ -227,7 +226,7 @@ export function Sidebar({
           screen="settings"
           onSelect={onSelect}
         />
-        <div className="sidebar-version">Native capture · 4K ready</div>
+        <div className="sidebar-version">Local capture · 4K ready</div>
       </div>
     </aside>
   );

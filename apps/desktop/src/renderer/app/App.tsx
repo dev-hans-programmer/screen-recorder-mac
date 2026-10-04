@@ -1,6 +1,5 @@
 import { useEffect, type ReactElement } from 'react';
 
-import { appMetadata } from '../../shared/app-metadata';
 import { Button, Sidebar, Tooltip } from './components';
 import { getRendererStore, useRendererSelector, type RecoveryAction } from './renderer-store';
 import { LibraryView, OnboardingView, RecorderView, SettingsView } from './views';
@@ -76,17 +75,22 @@ export function App(): ReactElement {
 
         <main className="content-region">
           <header className="topbar window-drag-region">
-            <div>
-              <div className="topbar-kicker">Capture workspace</div>
+            <div className="topbar-title">
               <h1>{onboarding ? 'Welcome' : screenTitles[activeScreen]}</h1>
+              <span>
+                {onboarding
+                  ? 'A quick setup before your first recording'
+                  : activeScreen === 'recorder'
+                    ? 'Choose a source and start capturing'
+                    : activeScreen === 'library'
+                      ? `${recordingCount} saved ${recordingCount === 1 ? 'recording' : 'recordings'}`
+                      : activeScreen === 'editor'
+                        ? 'Shape and export your recording'
+                        : 'Recording defaults and app preferences'}
+              </span>
             </div>
             <div className="topbar-actions">
-              <div
-                className={`connection-status ${recordingState === 'failed' ? 'is-warning' : ''}`}
-              >
-                <span className="status-pulse" />
-                {operation === 'idle' ? 'Native bridge online' : 'Working'}
-              </div>
+              {operation !== 'idle' && <div className="topbar-activity">Working…</div>}
               <Tooltip label="Open settings">
                 <Button
                   aria-label="Open settings"
@@ -143,13 +147,6 @@ export function App(): ReactElement {
               </>
             )}
           </div>
-
-          <footer className="content-footer">
-            <span>
-              {appMetadata.name} · {appMetadata.version}
-            </span>
-            <span>Built for focused, fluid capture on {appMetadata.platform}</span>
-          </footer>
         </main>
       </div>
     </div>

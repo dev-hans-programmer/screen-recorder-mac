@@ -279,6 +279,9 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
   const operation = useRendererSelector(store, (state) => state.operation);
 
   const recording = ['preparing', 'capturing', 'paused', 'stopping'].includes(recordingState);
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'display' | 'window' | 'application'>(
+    'all',
+  );
   const [clockNow, setClockNow] = useState(() => Date.now());
   const timerRef = useRef<{
     readonly sessionId: string | null;
@@ -333,39 +336,21 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
             (timerRef.current.pausedAt === null ? 0 : clockNow - timerRef.current.pausedAt),
         );
   const displayedDuration = Math.max(progress.durationMs, wallClockDuration);
+  const visibleSources =
+    sourceFilter === 'all' ? sources : sources.filter((source) => source.kind === sourceFilter);
 
   return (
-    <div className="view-stack">
-      <section
-        className={`recorder-hero ${recording ? 'is-recording' : ''}`}
-        aria-labelledby="recorder-title"
-      >
-        <div className="recorder-hero-copy">
-          <div className="section-eyebrow">
-            <span className="eyebrow-line" /> Native capture
-          </div>
-          <h2 id="recorder-title">Make every frame count.</h2>
-          <p>
-            Capture a crisp, fluid recording of your screen with hardware-accelerated encoding built
-            for macOS.
-          </p>
-        </div>
-        <div className="recording-orb" aria-hidden="true">
-          <div className="orb-core">
-            <Icon name={recording ? 'circle' : 'sparkles'} size={28} />
-          </div>
-          <span className="orb-ring orb-ring-one" />
-          <span className="orb-ring orb-ring-two" />
-        </div>
-      </section>
-
+    <div className="view-stack recorder-workspace">
       {!recording && <PermissionRecoveryPanel store={store} />}
 
       {recording && activeSession !== null ? (
-        <section className="active-recording-card" aria-live="polite">
+        <section className="active-recording-card recording-hud" aria-live="polite">
+          <div className="recording-source-glyph" aria-hidden="true">
+            <Icon name={selectedSource === undefined ? 'monitor' : sourceIcon(selectedSource)} />
+          </div>
           <div className="active-recording-main">
             <div className="recording-indicator">
-              <span /> Live recording
+              <span /> {recordingState === 'paused' ? 'Recording paused' : 'Recording'}
             </div>
             <div className="recording-timer">{formatDuration(displayedDuration)}</div>
             <p>
@@ -413,60 +398,97 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
           </div>
         </section>
       ) : (
-        <section className="control-grid">
-          <div className="surface-card source-card">
-            <div className="card-heading">
+        <section className="studio-layout">
+          <div className="capture-stage-card">
+            <div className="capture-stage-toolbar">
               <div>
-                <div className="card-kicker">Capture source</div>
-                <h3>What would you like to record?</h3>
+                <span className={`permission-dot ${permissionGranted ? 'is-granted' : ''}`} />
+                <strong>{permissionGranted ? 'Ready' : 'Permission required'}</strong>
               </div>
-              <StatusBadge tone={sources.length > 0 ? 'success' : 'warning'}>
-                {sources.length} available
-              </StatusBadge>
-            </div>
-            {sources.length === 0 ? (
-              <EmptyState
-                icon="monitor"
-                title="No sources available"
-                description="macOS did not return a display or window source yet."
-                action={
-                  <Button
-                    icon="activity"
-                    variant="secondary"
-                    onClick={() => void store.refreshSources()}
-                  >
-                    Refresh sources
-                  </Button>
-                }
+              <Button
+                aria-label="Refresh capture sources"
+                disabled={operation !== 'idle'}
+                icon="activity"
+                variant="icon"
+                onClick={() => void store.refreshSources()}
               />
-            ) : (
-              <div className="source-list" role="listbox" aria-label="Capture source">
-                {sources.map((source) => (
-                  <button
-                    aria-selected={selectedSourceId === source.id}
-                    className={`source-option ${selectedSourceId === source.id ? 'is-selected' : ''}`}
-                    disabled={!source.isAvailable}
-                    key={source.id}
-                    role="option"
-                    type="button"
-                    onClick={() => store.selectSource(source.id)}
-                  >
-                    <span className="source-icon">
-                      <Icon name={sourceIcon(source)} />
-                    </span>
-                    <span className="source-details">
-                      <strong>{source.name}</strong>
-                      <small>
-                        {source.kind} · {sourceDimensions(source)}
-                      </small>
-                    </span>
-                    <span className="source-check" aria-hidden="true">
-                      <Icon name="circle" size={14} />
-                    </span>
-                  </button>
-                ))}
+            </div>
+
+            <div className={`capture-stage ${selectedSource === undefined ? 'is-empty' : ''}`}>
+              <span className="capture-stage-glow" aria-hidden="true" />
+              {selectedSource === undefined ? (
+                <EmptyState
+                  icon="monitor"
+                  title="Choose what to record"
+                  description="Select a display, window, or application below."
+                />
+              ) : (
+                <div className="capture-stage-selection">
+                  <span className="capture-stage-icon">
+                    <Icon name={sourceIcon(selectedSource)} size={28} />
+                  </span>
+                  <span className="capture-stage-label">Selected source</span>
+                  <h2>{selectedSource.name}</h2>
+                  <p>{sourceDimensions(selectedSource)}</p>
+                  {recordingOptions.region !== null && (
+                    <StatusBadge tone="success">Custom region selected</StatusBadge>
+                  )}
+                </div>
+              )}
+              <span className="stage-corner stage-corner-one" aria-hidden="true" />
+              <span className="stage-corner stage-corner-two" aria-hidden="true" />
+              <span className="stage-corner stage-corner-three" aria-hidden="true" />
+              <span className="stage-corner stage-corner-four" aria-hidden="true" />
+            </div>
+
+            <div className="source-picker">
+              <div className="source-picker-heading">
+                <div className="source-filter" aria-label="Capture source type" role="tablist">
+                  {(['all', 'display', 'window', 'application'] as const).map((filter) => (
+                    <button
+                      aria-selected={sourceFilter === filter}
+                      className={sourceFilter === filter ? 'is-selected' : ''}
+                      key={filter}
+                      role="tab"
+                      type="button"
+                      onClick={() => setSourceFilter(filter)}
+                    >
+                      {filter === 'all'
+                        ? 'All'
+                        : filter === 'display'
+                          ? 'Screens'
+                          : `${filter[0].toUpperCase()}${filter.slice(1)}s`}
+                    </button>
+                  ))}
+                </div>
+                <span>{sources.length} available</span>
               </div>
-            )}
+              {visibleSources.length === 0 ? (
+                <p className="source-picker-empty">No sources in this category.</p>
+              ) : (
+                <div className="source-strip" role="listbox" aria-label="Capture source">
+                  {visibleSources.map((source) => (
+                    <button
+                      aria-selected={selectedSourceId === source.id}
+                      className={`source-option ${selectedSourceId === source.id ? 'is-selected' : ''}`}
+                      disabled={!source.isAvailable}
+                      key={source.id}
+                      role="option"
+                      type="button"
+                      onClick={() => store.selectSource(source.id)}
+                    >
+                      <span className="source-icon">
+                        <Icon name={sourceIcon(source)} />
+                      </span>
+                      <span className="source-details">
+                        <strong>{source.name}</strong>
+                        <small>{sourceDimensions(source)}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="source-actions">
               <Button
                 disabled={selectedSource?.kind !== 'display' || operation !== 'idle'}
@@ -484,13 +506,17 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
             </div>
           </div>
 
-          <div className="right-column">
-            <div className="surface-card quality-card">
-              <div className="card-kicker">Recording profile</div>
+          <aside className="recording-inspector">
+            <div className="inspector-heading">
+              <div>
+                <span>Recording</span>
+                <h3>Capture settings</h3>
+              </div>
+              <Icon name="sliders" size={17} />
+            </div>
+            <div className="inspector-section quality-card">
+              <div className="inspector-section-label">Quality</div>
               <div className="quality-value">
-                <span className="quality-icon">
-                  <Icon name="sliders" />
-                </span>
                 <strong>
                   {qualityLabel({
                     ...preferences,
@@ -546,10 +572,9 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
                   </select>
                 </label>
               </div>
-              <p>These values apply to the next recording.</p>
             </div>
-            <div className="surface-card audio-card">
-              <div className="card-kicker">Audio</div>
+            <div className="inspector-section audio-card">
+              <div className="inspector-section-label">Audio</div>
               <Toggle
                 checked={recordingOptions.systemAudio}
                 disabled={operation !== 'idle'}
@@ -562,7 +587,9 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
                 label="Microphone"
                 onChange={(checked) => store.setRecordingOptions({ microphone: checked })}
               />
-              <div className="audio-divider" />
+            </div>
+            <div className="inspector-section audio-card">
+              <div className="inspector-section-label">Pointer</div>
               <Toggle
                 checked={recordingOptions.showsCursor}
                 label="Show cursor"
@@ -574,12 +601,12 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
                 onChange={(checked) => store.setRecordingOptions({ showsMouseClicks: checked })}
               />
             </div>
-          </div>
+          </aside>
         </section>
       )}
 
       {!recording && (
-        <section className="start-bar">
+        <section className="start-bar record-dock">
           <div className="permission-summary">
             <span className={`permission-dot ${permissionGranted ? 'is-granted' : ''}`} />
             <div>
@@ -607,6 +634,7 @@ export function RecorderView({ store }: { readonly store: RendererStore }) {
             </Button>
           ) : permissionGranted ? (
             <Button
+              className="record-button"
               disabled={!canStart}
               icon="circle"
               variant="primary"
