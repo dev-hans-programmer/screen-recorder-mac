@@ -93,6 +93,13 @@ export function toRecordingEditPlanInput(dto: RecordingEditRequestDto): Recordin
     rotation: dto.rotation,
     mutedRanges: dto.mutedRanges.map((range) => ({ ...range })),
     posterTimeMs: dto.posterTimeMs,
+    project: {
+      ...dto.project,
+      tracks: dto.project.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => ({ ...clip })),
+      })),
+    },
   };
 }
 

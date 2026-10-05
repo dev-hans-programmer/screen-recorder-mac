@@ -67,6 +67,7 @@ export class NativeRecordingEditor implements RecordingEditorPort {
             rotation: request.plan.rotation,
             mutedRanges: request.plan.mutedRanges,
             posterTimeMs: request.plan.posterTimeMs,
+            project: request.plan.project,
           },
           { timeoutMs: editorTimeoutMs },
         ),

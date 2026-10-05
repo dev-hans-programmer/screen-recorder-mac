@@ -132,6 +132,7 @@ function createMainWindow(): void {
           'library',
           'editor-previews',
         ),
+        editorProjectsDirectory: path.join(app.getPath('userData'), 'editor-projects'),
         preferencesFilePath: path.join(app.getPath('userData'), 'preferences.json'),
         diagnosticsFilePath: path.join(app.getPath('userData'), 'diagnostics', 'recordings.json'),
         diagnosticsReport,

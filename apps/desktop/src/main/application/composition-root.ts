@@ -8,6 +8,7 @@ import {
   DeleteRecordingUseCase,
   ExportDiagnosticsUseCase,
   ExportEditedRecordingUseCase,
+  GetOrCreateEditingProjectUseCase,
   GetRecordingThumbnailUseCase,
   GetRecordingMediaUseCase,
   GetRecordingPreviewUseCase,
@@ -24,6 +25,7 @@ import {
   RevealRecordingUseCase,
   ResumeRecordingUseCase,
   StartRecordingUseCase,
+  SaveEditingProjectUseCase,
   StopRecordingUseCase,
   UpdatePreferencesUseCase,
   ValidateRecordingRequestUseCase,
@@ -39,6 +41,7 @@ import {
 
 import { InMemoryRecordingRepository } from '../infrastructure/in-memory-repositories';
 import { JsonPreferencesRepository } from '../infrastructure/json-preferences-repository';
+import { JsonEditingProjectRepository } from '../infrastructure/json-editing-project-repository';
 import { JsonRecordingDiagnosticsRepository } from '../infrastructure/json-recording-diagnostics-repository';
 import { MacOsSystemSettings } from '../infrastructure/macos-system-settings';
 import { ElectronRecordingFileActions } from '../infrastructure/recording-file-actions';
@@ -73,6 +76,8 @@ export interface ApplicationContainer {
     readonly deleteRecording: DeleteRecordingUseCase;
     readonly exportDiagnostics: ExportDiagnosticsUseCase;
     readonly exportEditedRecording: ExportEditedRecordingUseCase;
+    readonly getOrCreateEditingProject: GetOrCreateEditingProjectUseCase;
+    readonly saveEditingProject: SaveEditingProjectUseCase;
     readonly getRecordingMedia: GetRecordingMediaUseCase;
     readonly getRecordingPreview: GetRecordingPreviewUseCase;
     readonly getPreferences: GetPreferencesUseCase;
@@ -104,6 +109,7 @@ export interface ApplicationContainerOptions {
   readonly thumbnailCacheDirectory: string;
   readonly editorThumbnailStagingDirectory: string;
   readonly editorPreviewCacheDirectory: string;
+  readonly editorProjectsDirectory: string;
   readonly preferencesFilePath: string;
   readonly diagnosticsFilePath: string;
   readonly diagnosticsReport: DiagnosticsReportPort;
@@ -126,6 +132,7 @@ export function createApplicationContainer(
     logger,
   });
   const catalog = new SqliteRecordingCatalog({ databasePath: options.libraryDatabasePath, logger });
+  const editingProjects = new JsonEditingProjectRepository(options.editorProjectsDirectory);
   const files = new ElectronRecordingFileActions();
   const thumbnails = new RecordingThumbnailService(options.thumbnailCacheDirectory);
   const systemSettings = new MacOsSystemSettings();
@@ -192,6 +199,12 @@ export function createApplicationContainer(
         ids,
         logger,
       ),
+      getOrCreateEditingProject: new GetOrCreateEditingProjectUseCase(
+        catalog,
+        editingProjects,
+        clock,
+      ),
+      saveEditingProject: new SaveEditingProjectUseCase(catalog, editingProjects, clock),
       getRecordingMedia: new GetRecordingMediaUseCase(catalog),
       getRecordingPreview: new GetRecordingPreviewUseCase(catalog, previews),
       getPreferences: new GetPreferencesUseCase(preferences),

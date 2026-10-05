@@ -9,6 +9,7 @@ import {
   type CaptureRegionDto,
   type CapturePermissionsDto,
   type CaptureSourceDto,
+  type EditingProjectDto,
   type IpcCommandName,
   type IpcResponse,
   type RecordingArtifactDto,
@@ -91,6 +92,10 @@ export function createScreenRecorderApi(
       sendCommand('library.media-url', { recordingId }) as Promise<string>,
     exportEditedRecording: (edit) =>
       sendCommand('editor.export', { edit }) as Promise<RecordingMetadataDto>,
+    loadEditingProject: (recordingId) =>
+      sendCommand('editor.project.load', { recordingId }) as Promise<EditingProjectDto>,
+    saveEditingProject: (project) =>
+      sendCommand('editor.project.save', { project }) as Promise<EditingProjectDto>,
     renameRecording: (recordingId, title) =>
       sendCommand('library.rename', { recordingId, title }) as Promise<RecordingMetadataDto>,
     openRecording: async (recordingId) => {

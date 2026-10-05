@@ -230,6 +230,50 @@ export const recordingEditRequestSchema = z
     rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]),
     mutedRanges: z.array(recordingMuteRangeSchema).max(100),
     posterTimeMs: z.number().finite().nonnegative(),
+    project: z.lazy(() => editingProjectSchema),
+  })
+  .strict();
+
+const editingTrackKindSchema = z.enum([
+  'screen',
+  'webcam',
+  'microphone',
+  'system-audio',
+  'music',
+  'captions',
+  'overlays',
+]);
+const editingClipSchema = z
+  .object({
+    id: identifierSchema,
+    sourceRecordingId: identifierSchema,
+    sourceTrackIndex: z.number().int().nonnegative().nullable(),
+    sourceStartMs: z.number().finite().nonnegative(),
+    durationMs: z.number().finite().positive(),
+    timelineStartMs: z.number().finite().nonnegative(),
+  })
+  .strict();
+const editingTrackSchema = z
+  .object({
+    id: identifierSchema,
+    kind: editingTrackKindSchema,
+    name: z.string().trim().min(1).max(120),
+    order: z.number().int().nonnegative(),
+    visible: z.boolean(),
+    muted: z.boolean(),
+    locked: z.boolean(),
+    gain: z.number().finite().min(0).max(4),
+    clips: z.array(editingClipSchema).max(500),
+  })
+  .strict();
+export const editingProjectSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    recordingId: identifierSchema,
+    title: recordingTitleSchema,
+    durationMs: z.number().finite().positive(),
+    updatedAt: z.number().finite().nonnegative(),
+    tracks: z.array(editingTrackSchema).min(1).max(64),
   })
   .strict();
 
@@ -276,6 +320,8 @@ export const ipcRequestSchema = z.discriminatedUnion('command', [
   requestSchema('library.delete', recordingIdPayloadSchema),
   requestSchema('library.open-folder', emptyPayloadSchema),
   requestSchema('editor.export', z.object({ edit: recordingEditRequestSchema }).strict()),
+  requestSchema('editor.project.load', recordingIdPayloadSchema),
+  requestSchema('editor.project.save', z.object({ project: editingProjectSchema }).strict()),
   requestSchema(
     'system.open-permission-settings',
     z.object({ target: z.enum(['screen-recording', 'microphone']) }).strict(),
@@ -322,6 +368,8 @@ const responseDataSchemas = {
   'library.delete': z.null(),
   'library.open-folder': z.null(),
   'editor.export': recordingMetadataSchema,
+  'editor.project.load': editingProjectSchema,
+  'editor.project.save': editingProjectSchema,
   'system.open-permission-settings': z.null(),
   'app.relaunch': z.null(),
   'diagnostics.export': z.string().min(1).nullable(),
@@ -561,5 +609,6 @@ export type AppPreferencesPatchDto = z.infer<typeof appPreferencesPatchSchema>;
 export type RecordingArtifactDto = z.infer<typeof recordingArtifactSchema>;
 export type RecordingMetadataDto = z.infer<typeof recordingMetadataSchema>;
 export type RecordingEditRequestDto = z.infer<typeof recordingEditRequestSchema>;
+export type EditingProjectDto = z.infer<typeof editingProjectSchema>;
 export type RecordingSessionSnapshotDto = z.infer<typeof recordingSessionSnapshotSchema>;
 export type ShortcutAction = z.infer<typeof shortcutMessageSchema>['action'];

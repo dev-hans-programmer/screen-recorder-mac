@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -8,7 +9,11 @@ import {
   type ReactNode,
 } from 'react';
 
-import type { RecordingEditRequestDto, RecordingMetadataDto } from '@screen-recorder/contracts';
+import type {
+  EditingProjectDto,
+  RecordingEditRequestDto,
+  RecordingMetadataDto,
+} from '@screen-recorder/contracts';
 
 import { Button, EmptyState, Icon, LoadingState } from '../app/components';
 import { useRendererSelector, type RendererStore } from '../app/renderer-store';
@@ -25,7 +30,26 @@ type InspectorTab = 'frame' | 'export';
 
 const originalCrop: CropRect = { x: 0, y: 0, width: 1, height: 1 };
 const minimumRangeMs = 100;
-const timelineLabelWidthPx = 72;
+const timelineLabelWidthPx = 184;
+
+function trackKindLabel(kind: EditingProjectDto['tracks'][number]['kind']): string {
+  switch (kind) {
+    case 'screen':
+      return 'Screen';
+    case 'webcam':
+      return 'Webcam';
+    case 'microphone':
+      return 'Microphone';
+    case 'system-audio':
+      return 'System audio';
+    case 'music':
+      return 'Music';
+    case 'captions':
+      return 'Captions';
+    case 'overlays':
+      return 'Overlays';
+  }
+}
 
 export function EditorView({ store }: { readonly store: RendererStore }): ReactElement {
   const recordingId = useRendererSelector(store, (state) => state.editorRecordingId);
@@ -60,6 +84,11 @@ function RecordingEditor({
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const [project, setProject] = useState<EditingProjectDto | null>(null);
+  const [projectSaveState, setProjectSaveState] = useState<
+    'loading' | 'saved' | 'saving' | 'error'
+  >('loading');
+  const projectSaveTimerRef = useRef<number | null>(null);
   const [title, setTitle] = useState(`${recording.title || 'Untitled recording'} – Edited`);
   const [trimStartMs, setTrimStartMs] = useState(0);
   const [trimEndMs, setTrimEndMs] = useState(recording.durationMs);
@@ -72,13 +101,40 @@ function RecordingEditor({
   const [playing, setPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('frame');
+  const projectSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const queueProjectSave = useCallback(
+    (candidate: EditingProjectDto): Promise<EditingProjectDto> => {
+      const save = projectSaveQueueRef.current.then(() => store.saveEditingProject(candidate));
+      projectSaveQueueRef.current = save.then(
+        () => undefined,
+        () => undefined,
+      );
+      return save;
+    },
+    [store],
+  );
 
   const dimensions = useMemo(
     () => outputDimensions(recording, crop, rotation),
     [crop, recording, rotation],
   );
+  const outputDurationMs =
+    project?.tracks
+      .filter((track) => ['screen', 'microphone', 'system-audio', 'music'].includes(track.kind))
+      .flatMap((track) => track.clips)
+      .reduce(
+        (latestEnd, clip) => Math.max(latestEnd, clip.timelineStartMs + clip.durationMs),
+        0,
+      ) || trimEndMs - trimStartMs;
   const exporting = operation === 'exporting-edit';
   const hasAudio = recording.hasSystemAudio || recording.hasMicrophone;
+  const screenTrack = project?.tracks.find((track) => track.kind === 'screen');
+  const screenClip = screenTrack?.clips[0];
+  const screenFrameActive =
+    screenClip === undefined ||
+    (currentMs >= screenClip.timelineStartMs &&
+      currentMs <= screenClip.timelineStartMs + screenClip.durationMs);
 
   useEffect(() => {
     let active = true;
@@ -104,6 +160,51 @@ function RecordingEditor({
   }, [recording.id, store]);
 
   useEffect(() => {
+    let active = true;
+    void store
+      .loadEditingProject(recording.id)
+      .then((loaded) => {
+        if (!active) return;
+        setProject(loaded);
+        setTitle(loaded.title);
+        const screenClip = loaded.tracks.find((track) => track.kind === 'screen')?.clips.at(0);
+        if (screenClip !== undefined) {
+          setTrimStartMs(screenClip.sourceStartMs);
+          setTrimEndMs(
+            Math.min(recording.durationMs, screenClip.sourceStartMs + screenClip.durationMs),
+          );
+        }
+        setProjectSaveState('saved');
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setProjectSaveState('error');
+        setLocalError(
+          error instanceof Error ? error.message : 'The editing project could not load.',
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [recording.durationMs, recording.id, store]);
+
+  useEffect(() => {
+    if (project === null) return undefined;
+    setProjectSaveState('saving');
+    const timer = window.setTimeout(() => {
+      projectSaveTimerRef.current = null;
+      void queueProjectSave(project)
+        .then(() => setProjectSaveState('saved'))
+        .catch(() => setProjectSaveState('error'));
+    }, 400);
+    projectSaveTimerRef.current = timer;
+    return () => {
+      window.clearTimeout(timer);
+      if (projectSaveTimerRef.current === timer) projectSaveTimerRef.current = null;
+    };
+  }, [project, queueProjectSave]);
+
+  useEffect(() => {
     const handleFullscreenChange = (): void => {
       setIsFullscreen(document.fullscreenElement === canvasPanelRef.current);
     };
@@ -111,14 +212,53 @@ function RecordingEditor({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video === null || mediaUrl === null || playing) return;
+    if (
+      screenClip !== undefined &&
+      currentMs >= screenClip.timelineStartMs &&
+      currentMs <= screenClip.timelineStartMs + screenClip.durationMs
+    ) {
+      const sourceTimeMs = screenClip.sourceStartMs + currentMs - screenClip.timelineStartMs;
+      if (Math.abs(video.currentTime * 1_000 - sourceTimeMs) > 80) {
+        video.currentTime = sourceTimeMs / 1_000;
+      }
+    }
+  }, [
+    currentMs,
+    mediaUrl,
+    playing,
+    screenClip?.durationMs,
+    screenClip?.sourceStartMs,
+    screenClip?.timelineStartMs,
+  ]);
+
   function seekTo(milliseconds: number): void {
     const next = Math.min(recording.durationMs, Math.max(0, milliseconds));
     setCurrentMs(next);
     if (videoRef.current !== null) {
-      videoRef.current.currentTime = next / 1_000;
-      videoRef.current.muted = mutedRanges.some(
-        (range) => next >= range.startMs && next < range.endMs,
-      );
+      const clip = screenClip;
+      const clipOffsetMs = clip === undefined ? next : next - clip.timelineStartMs;
+      const insideClip =
+        clip === undefined || (clipOffsetMs >= 0 && clipOffsetMs <= clip.durationMs);
+      if (insideClip) {
+        videoRef.current.currentTime =
+          (clip === undefined ? next : clip.sourceStartMs + clipOffsetMs) / 1_000;
+      } else {
+        videoRef.current.pause();
+      }
+      const audioTracks =
+        project?.tracks.filter(
+          (track) =>
+            (track.kind === 'microphone' ||
+              track.kind === 'system-audio' ||
+              track.kind === 'music') &&
+            track.clips.length > 0,
+        ) ?? [];
+      videoRef.current.muted =
+        (audioTracks.length > 0 && audioTracks.every((track) => track.muted)) ||
+        mutedRanges.some((range) => next >= range.startMs && next < range.endMs);
     }
   }
 
@@ -129,7 +269,11 @@ function RecordingEditor({
       video.pause();
       return;
     }
-    if (currentMs < trimStartMs || currentMs >= trimEndMs) seekTo(trimStartMs);
+    const clip = screenClip;
+    const insideClip =
+      clip === undefined ||
+      (currentMs >= clip.timelineStartMs && currentMs < clip.timelineStartMs + clip.durationMs);
+    if (!insideClip) seekTo(clip?.timelineStartMs ?? trimStartMs);
     try {
       await video.play();
     } catch {
@@ -193,14 +337,12 @@ function RecordingEditor({
     const next = Math.min(trimEndMs - minimumRangeMs, Math.max(0, value));
     setTrimStartMs(next);
     if (posterTimeMs < next) setPosterTimeMs(next);
-    setMutedRanges((ranges) => ranges.filter((range) => range.startMs >= next));
   }
 
   function updateTrimEnd(value: number): void {
     const next = Math.max(trimStartMs + minimumRangeMs, Math.min(recording.durationMs, value));
     setTrimEndMs(next);
     if (posterTimeMs > next) setPosterTimeMs(next);
-    setMutedRanges((ranges) => ranges.filter((range) => range.endMs <= next));
   }
 
   function addMuteRange(atMs: number): void {
@@ -208,8 +350,9 @@ function RecordingEditor({
       setLocalError('This recording does not contain an audio track.');
       return;
     }
-    const startMs = Math.max(trimStartMs, Math.min(trimEndMs - minimumRangeMs, atMs));
-    const endMs = Math.min(trimEndMs, startMs + 1_000);
+    const projectDurationMs = project?.durationMs ?? recording.durationMs;
+    const startMs = Math.max(0, Math.min(projectDurationMs - minimumRangeMs, atMs));
+    const endMs = Math.min(projectDurationMs, startMs + 1_000);
     if (endMs - startMs < minimumRangeMs) return;
     setMutedRanges((ranges) =>
       [...ranges, { startMs, endMs }].sort((left, right) => left.startMs - right.startMs),
@@ -232,6 +375,21 @@ function RecordingEditor({
     setPosterTimeMs(Math.min(trimEndMs, Math.max(trimStartMs, value)));
   }
 
+  function sourceTimeAtTimeline(timelineMs: number): number {
+    if (screenClip === undefined) return timelineMs;
+    return Math.min(
+      screenClip.sourceStartMs + screenClip.durationMs,
+      Math.max(
+        screenClip.sourceStartMs,
+        screenClip.sourceStartMs + timelineMs - screenClip.timelineStartMs,
+      ),
+    );
+  }
+
+  function updatePosterTimeAtTimeline(timelineMs: number): void {
+    updatePosterTime(sourceTimeAtTimeline(timelineMs));
+  }
+
   function resetTimeline(): void {
     videoRef.current?.pause();
     setTrimStartMs(0);
@@ -241,7 +399,144 @@ function RecordingEditor({
     seekTo(0);
   }
 
+  function updateTrack(trackId: string, patch: Partial<EditingProjectDto['tracks'][number]>): void {
+    setProject((current) =>
+      current === null
+        ? current
+        : {
+            ...current,
+            updatedAt: Date.now(),
+            tracks: current.tracks.map((track) =>
+              track.id === trackId ? { ...track, ...patch } : track,
+            ),
+          },
+    );
+  }
+
+  function addTrack(kind: EditingProjectDto['tracks'][number]['kind']): void {
+    setProject((current) => {
+      if (current === null) return current;
+      const sameKind = current.tracks.filter((track) => track.kind === kind).length;
+      const baseName = trackKindLabel(kind);
+      return {
+        ...current,
+        updatedAt: Date.now(),
+        tracks: [
+          ...current.tracks,
+          {
+            id: crypto.randomUUID(),
+            kind,
+            name: sameKind === 0 ? baseName : `${baseName} ${sameKind + 1}`,
+            order: current.tracks.length,
+            visible: true,
+            muted: false,
+            locked: false,
+            gain: 1,
+            clips: [],
+          },
+        ],
+      };
+    });
+  }
+
+  function removeTrack(trackId: string): void {
+    setProject((current) => {
+      if (current === null) return current;
+      const target = current.tracks.find((track) => track.id === trackId);
+      if (target === undefined || target.clips.length > 0 || target.kind === 'screen')
+        return current;
+      return {
+        ...current,
+        updatedAt: Date.now(),
+        tracks: current.tracks
+          .filter((track) => track.id !== trackId)
+          .map((track, order) => ({ ...track, order })),
+      };
+    });
+  }
+
+  function moveTrack(trackId: string, delta: -1 | 1): void {
+    setProject((current) => {
+      if (current === null) return current;
+      const tracks = [...current.tracks].sort((left, right) => left.order - right.order);
+      const index = tracks.findIndex((track) => track.id === trackId);
+      const nextIndex = index + delta;
+      if (index < 0 || nextIndex < 0 || nextIndex >= tracks.length) return current;
+      [tracks[index], tracks[nextIndex]] = [tracks[nextIndex], tracks[index]];
+      return {
+        ...current,
+        updatedAt: Date.now(),
+        tracks: tracks.map((track, order) => ({ ...track, order })),
+      };
+    });
+  }
+
+  function moveClip(trackId: string, clipId: string, timelineStartMs: number): void {
+    setProject((current) => {
+      if (current === null) return current;
+      const track = current.tracks.find((candidate) => candidate.id === trackId);
+      const clip = track?.clips.find((candidate) => candidate.id === clipId);
+      if (track === undefined || clip === undefined || track.locked) return current;
+      const latestStartMs = Math.max(0, current.durationMs - clip.durationMs);
+      const nextStartMs =
+        Math.round(Math.min(latestStartMs, Math.max(0, timelineStartMs)) / 10) * 10;
+      return {
+        ...current,
+        updatedAt: Date.now(),
+        tracks: current.tracks.map((candidate) =>
+          candidate.id !== trackId
+            ? candidate
+            : {
+                ...candidate,
+                clips: candidate.clips.map((clip) =>
+                  clip.id === clipId ? { ...clip, timelineStartMs: nextStartMs } : clip,
+                ),
+              },
+        ),
+      };
+    });
+  }
+
+  function updateProjectTitle(nextTitle: string): void {
+    setTitle(nextTitle);
+    setProject((current) =>
+      current === null ? current : { ...current, title: nextTitle, updatedAt: Date.now() },
+    );
+  }
+
+  useEffect(() => {
+    if (project === null) return;
+    setProject((current) =>
+      current === null
+        ? current
+        : {
+            ...current,
+            tracks: current.tracks.map((track) =>
+              !['screen', 'microphone', 'system-audio'].includes(track.kind) ||
+              track.clips.length === 0
+                ? track
+                : {
+                    ...track,
+                    clips: track.clips.map((clip, index) =>
+                      index === 0
+                        ? {
+                            ...clip,
+                            sourceStartMs: trimStartMs,
+                            durationMs: trimEndMs - trimStartMs,
+                          }
+                        : clip,
+                    ),
+                  },
+            ),
+          },
+    );
+  }, [project === null, trimEndMs, trimStartMs]);
+
   async function exportEdit(): Promise<void> {
+    if (project === null) {
+      setLocalError('Wait for the editing project to finish loading before exporting.');
+      return;
+    }
     if (title.trim().length === 0) {
       setLocalError('Enter a name for the edited recording.');
       return;
@@ -252,16 +547,30 @@ function RecordingEditor({
     }
     videoRef.current?.pause();
     setLocalError(null);
-    await store.exportEditedRecording({
-      recordingId: recording.id,
-      title,
-      trimStartMs,
-      trimEndMs,
-      crop,
-      rotation,
-      mutedRanges,
-      posterTimeMs: Math.min(trimEndMs, Math.max(trimStartMs, posterTimeMs)),
-    });
+    const projectForExport = { ...project, title };
+    try {
+      if (projectSaveTimerRef.current !== null) {
+        window.clearTimeout(projectSaveTimerRef.current);
+        projectSaveTimerRef.current = null;
+      }
+      setProjectSaveState('saving');
+      await queueProjectSave(projectForExport);
+      setProjectSaveState('saved');
+      await store.exportEditedRecording({
+        recordingId: recording.id,
+        title,
+        trimStartMs,
+        trimEndMs,
+        crop,
+        rotation,
+        mutedRanges,
+        posterTimeMs: Math.min(trimEndMs, Math.max(trimStartMs, posterTimeMs)),
+        project: projectForExport,
+      });
+    } catch (error) {
+      setProjectSaveState('error');
+      setLocalError(error instanceof Error ? error.message : 'The editing project could not save.');
+    }
   }
 
   return (
@@ -281,17 +590,19 @@ function RecordingEditor({
             aria-label="Edited recording name"
             maxLength={180}
             value={title}
-            onChange={(event) => setTitle(event.target.value)}
+            onChange={(event) => updateProjectTitle(event.target.value)}
           />
         </div>
         <div className="editor-command-meta">
           <span>
             {dimensions.width} × {dimensions.height}
           </span>
-          <span>{formatEditorTime(trimEndMs - trimStartMs)}</span>
+          <span>{formatEditorTime(outputDurationMs)}</span>
         </div>
         <Button
-          disabled={exporting || mediaUrl === null}
+          disabled={
+            exporting || mediaUrl === null || project === null || projectSaveState === 'loading'
+          }
           icon="sparkles"
           variant="primary"
           onClick={() => void exportEdit()}
@@ -330,6 +641,10 @@ function RecordingEditor({
                   playsInline
                   preload="auto"
                   src={mediaUrl}
+                  style={{
+                    visibility:
+                      screenTrack?.visible === false || !screenFrameActive ? 'hidden' : 'visible',
+                  }}
                   onCanPlay={() => setMediaError(null)}
                   onClick={() => void togglePlayback()}
                   onError={(event) => {
@@ -339,21 +654,38 @@ function RecordingEditor({
                       `The editing preview could not be decoded${code === undefined ? '.' : ` (media error ${code}).`}`,
                     );
                   }}
-                  onLoadedMetadata={() => seekTo(trimStartMs)}
+                  onLoadedMetadata={() => seekTo(screenClip?.timelineStartMs ?? trimStartMs)}
                   onPause={() => setPlaying(false)}
                   onPlay={() => setPlaying(true)}
                   onTimeUpdate={(event) => {
                     const video = event.currentTarget;
-                    const elapsed = Math.round(video.currentTime * 1_000);
-                    if (!video.paused && elapsed >= trimEndMs) {
+                    const clip = screenClip;
+                    const sourceElapsed = Math.round(video.currentTime * 1_000);
+                    const elapsed =
+                      clip === undefined
+                        ? sourceElapsed
+                        : sourceElapsed - clip.sourceStartMs + clip.timelineStartMs;
+                    const clipEndMs =
+                      clip === undefined ? trimEndMs : clip.sourceStartMs + clip.durationMs;
+                    if (!video.paused && sourceElapsed >= clipEndMs) {
                       video.pause();
-                      seekTo(trimStartMs);
+                      seekTo(clip?.timelineStartMs ?? trimStartMs);
                       return;
                     }
                     setCurrentMs(elapsed);
-                    video.muted = mutedRanges.some(
-                      (range) => elapsed >= range.startMs && elapsed < range.endMs,
-                    );
+                    const audioTracks =
+                      project?.tracks.filter(
+                        (track) =>
+                          (track.kind === 'microphone' ||
+                            track.kind === 'system-audio' ||
+                            track.kind === 'music') &&
+                          track.clips.length > 0,
+                      ) ?? [];
+                    video.muted =
+                      (audioTracks.length > 0 && audioTracks.every((track) => track.muted)) ||
+                      mutedRanges.some(
+                        (range) => elapsed >= range.startMs && elapsed < range.endMs,
+                      );
                   }}
                 />
                 <div
@@ -504,7 +836,7 @@ function RecordingEditor({
                   <input
                     value={title}
                     maxLength={180}
-                    onChange={(event) => setTitle(event.target.value)}
+                    onChange={(event) => updateProjectTitle(event.target.value)}
                   />
                 </label>
               </InspectorSection>
@@ -530,7 +862,7 @@ function RecordingEditor({
                   </div>
                   <div>
                     <dt>Duration</dt>
-                    <dd>{formatEditorTime(trimEndMs - trimStartMs)}</dd>
+                    <dd>{formatEditorTime(outputDurationMs)}</dd>
                   </div>
                 </dl>
               </InspectorSection>
@@ -546,6 +878,8 @@ function RecordingEditor({
         currentMs={currentMs}
         durationMs={recording.durationMs}
         hasAudio={hasAudio}
+        projectSaveState={projectSaveState}
+        tracks={project?.tracks ?? []}
         mutedRanges={mutedRanges}
         playing={playing}
         posterTimeMs={posterTimeMs}
@@ -553,10 +887,15 @@ function RecordingEditor({
         trimEndMs={trimEndMs}
         trimStartMs={trimStartMs}
         onAddMute={addMuteRange}
-        onPosterChange={updatePosterTime}
+        onAddTrack={addTrack}
+        onMoveTrack={moveTrack}
+        onMoveClip={moveClip}
+        onPosterChange={updatePosterTimeAtTimeline}
+        onRemoveTrack={removeTrack}
         onRemoveMute={removeMuteRange}
         onReset={resetTimeline}
         onSeek={seekTo}
+        onTrackChange={updateTrack}
         onTrimEndChange={updateTrimEnd}
         onTrimStartChange={updateTrimStart}
         onUpdateMute={updateMuteRange}
@@ -583,10 +922,21 @@ function InspectorSection({
 type TimelineDrag =
   | { readonly type: 'playhead' }
   | { readonly type: 'poster' }
-  | { readonly type: 'trim-start' }
-  | { readonly type: 'trim-end' }
+  | {
+      readonly type: 'trim-start' | 'trim-end';
+      readonly clipTimelineStartMs: number;
+      readonly clipSourceStartMs: number;
+    }
   | { readonly type: 'mute-start'; readonly index: number }
-  | { readonly type: 'mute-end'; readonly index: number };
+  | { readonly type: 'mute-end'; readonly index: number }
+  | {
+      readonly type: 'clip-move';
+      readonly trackId: string;
+      readonly clipId: string;
+      readonly startX: number;
+      readonly originalStartMs: number;
+      readonly clipDurationMs: number;
+    };
 
 interface TimelineContext {
   readonly x: number;
@@ -605,11 +955,21 @@ interface TimelineEditorProps {
   readonly mutedRanges: readonly MuteRange[];
   readonly thumbnailUrl: string | null;
   readonly playing: boolean;
+  readonly tracks: EditingProjectDto['tracks'];
+  readonly projectSaveState: 'loading' | 'saved' | 'saving' | 'error';
   readonly onSeek: (timeMs: number) => void;
   readonly onTrimStartChange: (timeMs: number) => void;
   readonly onTrimEndChange: (timeMs: number) => void;
   readonly onPosterChange: (timeMs: number) => void;
   readonly onAddMute: (timeMs: number) => void;
+  readonly onAddTrack: (kind: EditingProjectDto['tracks'][number]['kind']) => void;
+  readonly onMoveTrack: (trackId: string, delta: -1 | 1) => void;
+  readonly onMoveClip: (trackId: string, clipId: string, startMs: number) => void;
+  readonly onRemoveTrack: (trackId: string) => void;
+  readonly onTrackChange: (
+    trackId: string,
+    patch: Partial<EditingProjectDto['tracks'][number]>,
+  ) => void;
   readonly onUpdateMute: (index: number, range: MuteRange) => void;
   readonly onRemoveMute: (index: number) => void;
   readonly onReset: () => void;
@@ -620,6 +980,8 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
     durationMs,
     currentMs,
     hasAudio,
+    tracks,
+    projectSaveState,
     trimStartMs,
     trimEndMs,
     posterTimeMs,
@@ -631,7 +993,12 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
     onTrimEndChange,
     onPosterChange,
     onAddMute,
+    onAddTrack,
+    onMoveTrack,
+    onMoveClip,
+    onRemoveTrack,
     onUpdateMute,
+    onTrackChange,
     onRemoveMute,
     onReset,
   } = props;
@@ -641,6 +1008,7 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
   const [drag, setDrag] = useState<TimelineDrag | null>(null);
   const [context, setContext] = useState<TimelineContext | null>(null);
   const safeDurationMs = Math.max(durationMs, 1);
+  const screenTimelineClip = tracks.find((track) => track.kind === 'screen')?.clips[0];
   const tickCount = Math.max(10, Math.round(10 * zoom));
   const ticks = useMemo(
     () => Array.from({ length: tickCount + 1 }, (_, index) => (safeDurationMs * index) / tickCount),
@@ -655,6 +1023,16 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
   );
   const percentage = (timeMs: number): number =>
     Math.min(100, Math.max(0, (timeMs / safeDurationMs) * 100));
+  const sourceTimeAtTimeline = (timelineMs: number): number =>
+    screenTimelineClip === undefined
+      ? timelineMs
+      : Math.min(
+          screenTimelineClip.sourceStartMs + screenTimelineClip.durationMs,
+          Math.max(
+            screenTimelineClip.sourceStartMs,
+            screenTimelineClip.sourceStartMs + timelineMs - screenTimelineClip.timelineStartMs,
+          ),
+        );
 
   function timeAt(clientX: number): number {
     const bounds = canvasRef.current?.getBoundingClientRect();
@@ -677,20 +1055,35 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
       const timeMs = Math.round(timeAt(event.clientX) / 10) * 10;
       if (drag.type === 'playhead') onSeek(timeMs);
       else if (drag.type === 'poster') onPosterChange(timeMs);
-      else if (drag.type === 'trim-start') onTrimStartChange(timeMs);
-      else if (drag.type === 'trim-end') onTrimEndChange(timeMs);
-      else {
+      else if (drag.type === 'trim-start') {
+        onTrimStartChange(drag.clipSourceStartMs + timeMs - drag.clipTimelineStartMs);
+      } else if (drag.type === 'trim-end') {
+        onTrimEndChange(drag.clipSourceStartMs + timeMs - drag.clipTimelineStartMs);
+      } else if (drag.type === 'clip-move') {
+        const bounds = canvasRef.current?.getBoundingClientRect();
+        if (bounds === undefined) return;
+        const timelineWidth = Math.max(1, bounds.width - timelineLabelWidthPx);
+        const deltaMs = ((event.clientX - drag.startX) / timelineWidth) * safeDurationMs;
+        onMoveClip(
+          drag.trackId,
+          drag.clipId,
+          Math.min(
+            safeDurationMs - drag.clipDurationMs,
+            Math.max(0, drag.originalStartMs + deltaMs),
+          ),
+        );
+      } else if (drag.type === 'mute-start' || drag.type === 'mute-end') {
         const range = mutedRanges[drag.index];
         if (range === undefined) return;
         if (drag.type === 'mute-start') {
           onUpdateMute(drag.index, {
-            startMs: Math.min(range.endMs - minimumRangeMs, Math.max(trimStartMs, timeMs)),
+            startMs: Math.min(range.endMs - minimumRangeMs, Math.max(0, timeMs)),
             endMs: range.endMs,
           });
         } else {
           onUpdateMute(drag.index, {
             startMs: range.startMs,
-            endMs: Math.max(range.startMs + minimumRangeMs, Math.min(trimEndMs, timeMs)),
+            endMs: Math.max(range.startMs + minimumRangeMs, Math.min(safeDurationMs, timeMs)),
           });
         }
       }
@@ -704,14 +1097,14 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
     };
   }, [
     drag,
+    onMoveClip,
     mutedRanges,
     onSeek,
     onPosterChange,
     onTrimEndChange,
     onTrimStartChange,
     onUpdateMute,
-    trimEndMs,
-    trimStartMs,
+    safeDurationMs,
   ]);
 
   useEffect(() => {
@@ -761,21 +1154,58 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
     setContext(null);
   }
 
-  const clipLeft = percentage(trimStartMs);
-  const clipWidth = Math.max(0.5, percentage(trimEndMs) - clipLeft);
+  const clipLeft = percentage(screenTimelineClip?.timelineStartMs ?? 0);
+  const clipWidth = Math.max(
+    0.5,
+    percentage(screenTimelineClip?.durationMs ?? trimEndMs - trimStartMs),
+  );
+  const posterTimelineMs =
+    screenTimelineClip === undefined
+      ? posterTimeMs
+      : screenTimelineClip.timelineStartMs + posterTimeMs - screenTimelineClip.sourceStartMs;
 
   return (
     <section className="editor-timeline-panel" aria-label="Editing timeline">
       <div className="editor-timeline-toolbar">
         <div className="editor-timeline-title">
           <strong>Timeline</strong>
-          <span>Right-click a clip or audio range for actions</span>
+          <span>
+            {projectSaveState === 'saving'
+              ? 'Saving project…'
+              : projectSaveState === 'error'
+                ? 'Project could not be saved'
+                : projectSaveState === 'loading'
+                  ? 'Loading project…'
+                  : 'Changes saved · drag clips to arrange; lane mix applies on export'}
+          </span>
         </div>
         <div className="editor-timeline-tools">
-          <button type="button" onClick={() => onTrimStartChange(currentMs)}>
+          <label className="editor-add-track-control">
+            <span className="visually-hidden">Add track</span>
+            <select
+              aria-label="Add track"
+              disabled={projectSaveState === 'loading'}
+              value=""
+              onChange={(event) => {
+                if (event.target.value !== '') {
+                  onAddTrack(event.target.value as EditingProjectDto['tracks'][number]['kind']);
+                }
+              }}
+            >
+              <option value="">+ Track</option>
+              <option value="screen">Screen</option>
+              <option value="webcam">Webcam</option>
+              <option value="microphone">Microphone</option>
+              <option value="system-audio">System audio</option>
+              <option value="music">Music</option>
+              <option value="captions">Captions</option>
+              <option value="overlays">Overlays</option>
+            </select>
+          </label>
+          <button type="button" onClick={() => onTrimStartChange(sourceTimeAtTimeline(currentMs))}>
             Set In
           </button>
-          <button type="button" onClick={() => onTrimEndChange(currentMs)}>
+          <button type="button" onClick={() => onTrimEndChange(sourceTimeAtTimeline(currentMs))}>
             Set Out
           </button>
           <button disabled={!hasAudio} type="button" onClick={() => onAddMute(currentMs)}>
@@ -803,8 +1233,8 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
       <div ref={scrollRef} className="editor-timeline-scroll">
         <div
           ref={canvasRef}
-          className={`editor-timeline-canvas ${drag !== null ? 'is-dragging' : ''}`}
-          style={{ width: `${zoom * 100}%` }}
+          className={`editor-timeline-canvas ${drag?.type === 'clip-move' ? 'is-moving-clip' : drag !== null ? 'is-dragging' : ''}`}
+          style={{ width: `${zoom * 100}%`, height: `${30 + tracks.length * 68}px` }}
           onContextMenu={(event) => openContextMenu(event)}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
@@ -825,89 +1255,178 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
             ))}
           </div>
 
-          <TimelineTrack label="Screen" icon="monitor">
-            <div
-              className="editor-video-clip"
-              style={{ left: `${clipLeft}%`, width: `${clipWidth}%` }}
-              onContextMenu={(event) => openContextMenu(event)}
-            >
-              <TimelineHandle
-                label="Adjust trim start"
-                side="start"
-                onStart={() => setDrag({ type: 'trim-start' })}
-              />
-              <div className="editor-filmstrip" aria-hidden="true">
-                {Array.from({ length: 24 }, (_, index) =>
-                  thumbnailUrl === null ? (
-                    <span key={index} />
-                  ) : (
-                    <img key={index} alt="" draggable={false} src={thumbnailUrl} />
-                  ),
-                )}
-              </div>
-              <span className="editor-clip-name">Screen recording</span>
-              <TimelineHandle
-                label="Adjust trim end"
-                side="end"
-                onStart={() => setDrag({ type: 'trim-end' })}
-              />
-            </div>
-          </TimelineTrack>
-
-          <TimelineTrack label="Audio" icon="activity">
-            {hasAudio ? (
-              <div
-                className="editor-audio-clip"
-                style={{ left: `${clipLeft}%`, width: `${clipWidth}%` }}
-                onContextMenu={(event) => openContextMenu(event)}
-              >
-                <div className="editor-waveform" aria-hidden="true">
-                  {waveform.map((height, index) => (
-                    <i key={index} style={{ height: `${height}%` }} />
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <span className="editor-empty-audio">No audio track</span>
-            )}
-            {hasAudio &&
-              mutedRanges.map((range, index) => (
-                <div
-                  key={`${range.startMs}-${range.endMs}-${index}`}
-                  className="editor-mute-block"
-                  style={{
-                    left: `${percentage(range.startMs)}%`,
-                    width: `${Math.max(0.35, percentage(range.endMs) - percentage(range.startMs))}%`,
-                  }}
-                  onContextMenu={(event) => openContextMenu(event, index)}
-                  onPointerDown={(event) => event.stopPropagation()}
+          {tracks
+            .slice()
+            .sort((left, right) => left.order - right.order)
+            .map((track, index, orderedTracks) => {
+              const audioTrack =
+                track.kind === 'microphone' ||
+                track.kind === 'system-audio' ||
+                track.kind === 'music';
+              const videoTrack = track.kind === 'screen' || track.kind === 'webcam';
+              const available = track.clips.length > 0;
+              return (
+                <TimelineTrack
+                  key={track.id}
+                  track={track}
+                  icon={
+                    track.kind === 'screen' || track.kind === 'webcam'
+                      ? 'monitor'
+                      : audioTrack
+                        ? 'activity'
+                        : 'sparkles'
+                  }
+                  first={index === 0}
+                  last={index === orderedTracks.length - 1}
+                  onChange={(patch) => onTrackChange(track.id, patch)}
+                  onMoveUp={() => onMoveTrack(track.id, -1)}
+                  onMoveDown={() => onMoveTrack(track.id, 1)}
+                  onRemove={() => onRemoveTrack(track.id)}
                 >
-                  <TimelineHandle
-                    range
-                    label="Adjust mute start"
-                    side="start"
-                    onStart={() => setDrag({ type: 'mute-start', index })}
-                  />
-                  <span>Muted</span>
-                  <TimelineHandle
-                    range
-                    label="Adjust mute end"
-                    side="end"
-                    onStart={() => setDrag({ type: 'mute-end', index })}
-                  />
-                </div>
-              ))}
-          </TimelineTrack>
+                  {track.kind === 'screen' && available ? (
+                    <div
+                      className={`editor-video-clip ${track.visible ? '' : 'is-track-disabled'}`}
+                      style={{ left: `${clipLeft}%`, width: `${clipWidth}%` }}
+                      onContextMenu={(event) => openContextMenu(event)}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        const clip = track.clips[0];
+                        if (clip !== undefined && !track.locked) {
+                          setDrag({
+                            type: 'clip-move',
+                            trackId: track.id,
+                            clipId: clip.id,
+                            startX: event.clientX,
+                            originalStartMs: clip.timelineStartMs,
+                            clipDurationMs: clip.durationMs,
+                          });
+                        }
+                      }}
+                    >
+                      {!track.locked && (
+                        <TimelineHandle
+                          label="Adjust trim start"
+                          side="start"
+                          onStart={() => {
+                            const clip = track.clips[0];
+                            if (clip !== undefined) {
+                              setDrag({
+                                type: 'trim-start',
+                                clipTimelineStartMs: clip.timelineStartMs,
+                                clipSourceStartMs: clip.sourceStartMs,
+                              });
+                            }
+                          }}
+                        />
+                      )}
+                      <div className="editor-filmstrip" aria-hidden="true">
+                        {Array.from({ length: 24 }, (_, thumbnailIndex) =>
+                          thumbnailUrl === null ? (
+                            <span key={thumbnailIndex} />
+                          ) : (
+                            <img key={thumbnailIndex} alt="" draggable={false} src={thumbnailUrl} />
+                          ),
+                        )}
+                      </div>
+                      <span className="editor-clip-name">Screen recording</span>
+                      {!track.locked && (
+                        <TimelineHandle
+                          label="Adjust trim end"
+                          side="end"
+                          onStart={() => {
+                            const clip = track.clips[0];
+                            if (clip !== undefined) {
+                              setDrag({
+                                type: 'trim-end',
+                                clipTimelineStartMs: clip.timelineStartMs,
+                                clipSourceStartMs: clip.sourceStartMs,
+                              });
+                            }
+                          }}
+                        />
+                      )}
+                    </div>
+                  ) : audioTrack && available ? (
+                    <>
+                      <div
+                        className={`editor-audio-clip ${track.muted ? 'is-track-muted' : ''}`}
+                        style={{
+                          left: `${percentage(track.clips[0]?.timelineStartMs ?? 0)}%`,
+                          width: `${percentage(track.clips[0]?.durationMs ?? 0)}%`,
+                        }}
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                          const clip = track.clips[0];
+                          if (clip !== undefined && !track.locked) {
+                            setDrag({
+                              type: 'clip-move',
+                              trackId: track.id,
+                              clipId: clip.id,
+                              startX: event.clientX,
+                              originalStartMs: clip.timelineStartMs,
+                              clipDurationMs: clip.durationMs,
+                            });
+                          }
+                        }}
+                        onContextMenu={(event) => openContextMenu(event)}
+                      >
+                        <div className="editor-waveform" aria-hidden="true">
+                          {waveform.map((height, waveformIndex) => (
+                            <i key={waveformIndex} style={{ height: `${height}%` }} />
+                          ))}
+                        </div>
+                        <span className="editor-clip-name">{track.name}</span>
+                      </div>
+                      {track.kind !== 'music' &&
+                        mutedRanges.map((range, rangeIndex) => (
+                          <div
+                            key={`${range.startMs}-${range.endMs}-${rangeIndex}`}
+                            className="editor-mute-block"
+                            style={{
+                              left: `${percentage(range.startMs)}%`,
+                              width: `${Math.max(0.35, percentage(range.endMs) - percentage(range.startMs))}%`,
+                            }}
+                            onContextMenu={(event) => openContextMenu(event, rangeIndex)}
+                            onPointerDown={(event) => event.stopPropagation()}
+                          >
+                            <TimelineHandle
+                              range
+                              label="Adjust mute start"
+                              side="start"
+                              onStart={() => setDrag({ type: 'mute-start', index: rangeIndex })}
+                            />
+                            <span>Muted</span>
+                            <TimelineHandle
+                              range
+                              label="Adjust mute end"
+                              side="end"
+                              onStart={() => setDrag({ type: 'mute-end', index: rangeIndex })}
+                            />
+                          </div>
+                        ))}
+                    </>
+                  ) : (
+                    <span className="editor-empty-track">
+                      {videoTrack
+                        ? 'No camera clip in this project yet'
+                        : audioTrack
+                          ? 'No audio clip in this project yet'
+                          : 'Ready for titles and visual elements'}
+                    </span>
+                  )}
+                </TimelineTrack>
+              );
+            })}
 
           <button
-            aria-label={`Thumbnail at ${formatEditorTime(posterTimeMs)}`}
+            aria-label={`Thumbnail at ${formatEditorTime(posterTimelineMs)}`}
             className="editor-poster-pin"
-            style={{ left: timelinePosition(posterTimeMs) }}
+            style={{ left: timelinePosition(posterTimelineMs) }}
             title="Library thumbnail"
             type="button"
             onPointerDown={(event) => {
               event.stopPropagation();
-              onSeek(posterTimeMs);
+              onSeek(posterTimelineMs);
               setDrag({ type: 'poster' });
             }}
           >
@@ -944,11 +1463,15 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
               />
               <ContextAction
                 label="Set trim start here"
-                onSelect={() => runContext(() => onTrimStartChange(context.timeMs))}
+                onSelect={() =>
+                  runContext(() => onTrimStartChange(sourceTimeAtTimeline(context.timeMs)))
+                }
               />
               <ContextAction
                 label="Set trim end here"
-                onSelect={() => runContext(() => onTrimEndChange(context.timeMs))}
+                onSelect={() =>
+                  runContext(() => onTrimEndChange(sourceTimeAtTimeline(context.timeMs)))
+                }
               />
               {hasAudio && (
                 <ContextAction
@@ -971,8 +1494,8 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
               context={context}
               currentMs={currentMs}
               mutedRanges={mutedRanges}
-              trimEndMs={trimEndMs}
-              trimStartMs={trimStartMs}
+              trimEndMs={durationMs}
+              trimStartMs={0}
               onRemoveMute={onRemoveMute}
               onRun={runContext}
               onSeek={onSeek}
@@ -986,21 +1509,115 @@ function TimelineEditor(props: TimelineEditorProps): ReactElement {
 }
 
 function TimelineTrack({
-  label,
+  track,
   icon,
+  first,
+  last,
+  onChange,
+  onMoveUp,
+  onMoveDown,
+  onRemove,
   children,
 }: {
-  readonly label: string;
-  readonly icon: 'monitor' | 'activity';
+  readonly track: EditingProjectDto['tracks'][number];
+  readonly icon: 'monitor' | 'activity' | 'sparkles';
+  readonly first: boolean;
+  readonly last: boolean;
+  readonly onChange: (patch: Partial<EditingProjectDto['tracks'][number]>) => void;
+  readonly onMoveUp: () => void;
+  readonly onMoveDown: () => void;
+  readonly onRemove: () => void;
   readonly children: ReactNode;
 }): ReactElement {
   return (
-    <div className="editor-timeline-track-row">
-      <div className="editor-track-label">
-        <Icon name={icon} size={14} />
-        <span>{label}</span>
+    <div className={`editor-timeline-track-row ${track.locked ? 'is-locked' : ''}`}>
+      <div className="editor-track-label" onPointerDown={(event) => event.stopPropagation()}>
+        <div className="editor-track-heading">
+          <Icon name={icon} size={14} />
+          <span title={track.name}>{track.name}</span>
+          <button
+            aria-label={`Move ${track.name} up`}
+            disabled={first}
+            type="button"
+            onClick={onMoveUp}
+          >
+            ↑
+          </button>
+          <button
+            aria-label={`Move ${track.name} down`}
+            disabled={last}
+            type="button"
+            onClick={onMoveDown}
+          >
+            ↓
+          </button>
+        </div>
+        <div className="editor-track-controls">
+          {(track.kind === 'screen' ||
+            track.kind === 'webcam' ||
+            track.kind === 'captions' ||
+            track.kind === 'overlays') && (
+            <button
+              aria-label={`${track.visible ? 'Hide' : 'Show'} ${track.name}`}
+              aria-pressed={track.visible}
+              title={track.visible ? 'Hide track' : 'Show track'}
+              type="button"
+              onClick={() => onChange({ visible: !track.visible })}
+            >
+              {track.visible ? '◉' : '○'}
+            </button>
+          )}
+          {(track.kind === 'microphone' ||
+            track.kind === 'system-audio' ||
+            track.kind === 'music') && (
+            <>
+              <button
+                aria-label={`${track.muted ? 'Unmute' : 'Mute'} ${track.name}`}
+                aria-pressed={!track.muted}
+                title={track.muted ? 'Unmute track' : 'Mute track'}
+                type="button"
+                onClick={() => onChange({ muted: !track.muted })}
+              >
+                {track.muted ? '×' : '♪'}
+              </button>
+              <input
+                aria-label={`${track.name} volume`}
+                disabled={track.muted || track.locked}
+                max={2}
+                min={0}
+                step={0.05}
+                title={`${Math.round(track.gain * 100)}% volume`}
+                type="range"
+                value={track.gain}
+                onChange={(event) => onChange({ gain: Number(event.target.value) })}
+              />
+            </>
+          )}
+          <button
+            aria-label={`${track.locked ? 'Unlock' : 'Lock'} ${track.name}`}
+            aria-pressed={track.locked}
+            title={track.locked ? 'Unlock track' : 'Lock track'}
+            type="button"
+            onClick={() => onChange({ locked: !track.locked })}
+          >
+            {track.locked ? '▣' : '□'}
+          </button>
+          {track.clips.length === 0 && track.kind !== 'screen' && (
+            <button
+              aria-label={`Remove ${track.name} track`}
+              title="Remove empty track"
+              type="button"
+              onClick={onRemove}
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
-      <div className="editor-track-lane">{children}</div>
+      <div className={`editor-track-lane editor-track-${track.kind}`}>
+        {track.locked && <span className="editor-track-lock-badge">Locked</span>}
+        {children}
+      </div>
     </div>
   );
 }

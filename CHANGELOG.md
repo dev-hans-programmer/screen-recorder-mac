@@ -7,6 +7,10 @@ Versions follow semantic versioning while the application is pre-1.0.
 
 ### Added
 
+- Persistent editing projects with screen, webcam, microphone, system-audio, music, captions, and
+  overlay lanes; captured tracks can be arranged, reordered, locked, hidden, muted, and gain-adjusted.
+- Native editor export now composes captured clips at their timeline positions and applies track
+  mute/gain settings while preserving the source recording.
 - Centralized application/native-helper version management and packaged-version verification.
 - Ordered migrations for preferences and the recording catalog.
 - Release-candidate checklist and operations, troubleshooting, limitations, and native-debugging

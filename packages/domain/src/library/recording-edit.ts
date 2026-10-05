@@ -1,5 +1,6 @@
 import { DomainError } from '../errors/domain-error';
 import { normalizeRecordingTitle } from './recording-metadata';
+import type { EditingProject } from '../editor/editing-project';
 
 export type RecordingRotation = 0 | 90 | 180 | 270;
 
@@ -24,6 +25,7 @@ export interface RecordingEditPlan {
   readonly rotation: RecordingRotation;
   readonly mutedRanges: readonly RecordingMuteRange[];
   readonly posterTimeMs: number;
+  readonly project?: EditingProject;
 }
 
 export type RecordingEditPlanInput = RecordingEditPlan;
@@ -49,7 +51,7 @@ function normalizeMuteRanges(
       if (range.startMs < trimStartMs || range.endMs > trimEndMs || range.endMs <= range.startMs) {
         throw new DomainError(
           'INVALID_VALUE',
-          'Mute ranges must be inside the selected trim and have a positive duration.',
+          'Mute ranges must be inside the editable timeline and have a positive duration.',
         );
       }
       return { startMs: range.startMs, endMs: range.endMs };
@@ -82,6 +84,32 @@ export function createRecordingEditPlan(
 
   if (input.recordingId.trim().length === 0) {
     throw new DomainError('INVALID_VALUE', 'A source recording is required.');
+  }
+  if (input.project !== undefined && input.project.recordingId !== input.recordingId) {
+    throw new DomainError(
+      'INVALID_VALUE',
+      'The editing project must use the selected source recording.',
+    );
+  }
+  if (input.project !== undefined) {
+    const project = input.project;
+    const trackIds = new Set(project.tracks.map((track) => track.id));
+    const invalidClip = project.tracks.some((track) =>
+      track.clips.some(
+        (clip) =>
+          clip.sourceRecordingId !== input.recordingId ||
+          clip.sourceStartMs + clip.durationMs > sourceDurationMs + 1 ||
+          clip.timelineStartMs + clip.durationMs > project.durationMs + 1,
+      ),
+    );
+    if (
+      !Number.isFinite(project.durationMs) ||
+      project.durationMs !== sourceDurationMs ||
+      trackIds.size !== project.tracks.length ||
+      invalidClip
+    ) {
+      throw new DomainError('INVALID_VALUE', 'The editing project timeline is invalid.');
+    }
   }
   if (
     input.trimStartMs < 0 ||
@@ -120,7 +148,12 @@ export function createRecordingEditPlan(
     trimEndMs: input.trimEndMs,
     crop: Object.freeze({ ...input.crop }),
     rotation: input.rotation,
-    mutedRanges: normalizeMuteRanges(input.mutedRanges, input.trimStartMs, input.trimEndMs),
+    mutedRanges: normalizeMuteRanges(
+      input.mutedRanges,
+      input.project === undefined ? input.trimStartMs : 0,
+      input.project?.durationMs ?? input.trimEndMs,
+    ),
     posterTimeMs: input.posterTimeMs,
+    ...(input.project === undefined ? {} : { project: input.project }),
   });
 }

@@ -2327,6 +2327,17 @@ select:focus-visible {
   cursor: not-allowed;
 }
 
+.editor-add-track-control select {
+  min-height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0 8px;
+  color: var(--text-soft);
+  background: var(--surface-muted);
+  cursor: pointer;
+  font-size: 0.61rem;
+}
+
 .editor-timeline-zoom {
   display: grid;
   grid-template-columns: auto 76px auto;
@@ -2348,7 +2359,6 @@ select:focus-visible {
 .editor-timeline-canvas {
   position: relative;
   min-width: 100%;
-  height: 178px;
   cursor: default;
   user-select: none;
 }
@@ -2357,10 +2367,14 @@ select:focus-visible {
   cursor: ew-resize;
 }
 
+.editor-timeline-canvas.is-moving-clip {
+  cursor: grabbing;
+}
+
 .editor-timeline-ruler {
   position: relative;
   height: 30px;
-  margin-left: 72px;
+  margin-left: 184px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-muted) 48%, transparent);
 }
@@ -2391,25 +2405,89 @@ select:focus-visible {
 
 .editor-timeline-track-row {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  height: 70px;
+  grid-template-columns: 184px minmax(0, 1fr);
+  height: 68px;
   border-bottom: 1px solid var(--border);
 }
 
-.editor-timeline-track-row:last-of-type {
-  height: 77px;
+.editor-timeline-track-row:last-child {
   border-bottom: 0;
 }
 
 .editor-track-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
   border-right: 1px solid var(--border);
-  padding: 0 9px;
+  padding: 5px 7px;
   color: var(--text-faint);
   background: color-mix(in srgb, var(--surface-muted) 48%, transparent);
   font-size: 0.59rem;
+}
+
+.editor-track-heading,
+.editor-track-controls {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.editor-track-heading {
+  gap: 5px;
+}
+
+.editor-track-heading > span {
+  flex: 1;
+  overflow: hidden;
+  color: var(--text-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-track-heading button,
+.editor-track-controls button {
+  display: grid;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--text-faint);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.66rem;
+  line-height: 1;
+}
+
+.editor-track-heading button:hover,
+.editor-track-controls button:hover,
+.editor-track-controls button[aria-pressed='true'] {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.editor-track-heading button:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.editor-track-controls {
+  gap: 3px;
+  padding-left: 18px;
+}
+
+.editor-track-controls input[type='range'] {
+  width: 44px;
+  min-width: 34px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.editor-track-controls input[type='range']:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .editor-track-lane {
@@ -2420,6 +2498,31 @@ select:focus-visible {
   background-size: 10% 100%;
 }
 
+.editor-track-lock-badge {
+  position: absolute;
+  z-index: 2;
+  top: 4px;
+  right: 6px;
+  color: var(--text-faint);
+  font-size: 0.48rem;
+  pointer-events: none;
+}
+
+.editor-empty-track {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  color: var(--text-faint);
+  font-size: 0.55rem;
+  transform: translateY(-50%);
+}
+
+.editor-video-clip.is-track-disabled,
+.editor-audio-clip.is-track-muted {
+  opacity: 0.32;
+  filter: grayscale(0.8);
+}
+
 .editor-video-clip,
 .editor-audio-clip {
   position: absolute;
@@ -2427,6 +2530,12 @@ select:focus-visible {
   bottom: 8px;
   overflow: hidden;
   border-radius: 7px;
+  cursor: grab;
+}
+
+.editor-timeline-canvas.is-moving-clip .editor-video-clip,
+.editor-timeline-canvas.is-moving-clip .editor-audio-clip {
+  cursor: grabbing;
 }
 
 .editor-video-clip {

@@ -225,6 +225,16 @@ async function dispatchRequest(
           ),
         ),
       );
+    case 'editor.project.load':
+      return successResponse(
+        request,
+        await container.useCases.getOrCreateEditingProject.execute(request.payload.recordingId),
+      );
+    case 'editor.project.save':
+      return successResponse(
+        request,
+        await container.useCases.saveEditingProject.execute(request.payload.project),
+      );
     case 'system.open-permission-settings':
       await container.useCases.openPermissionSettings.execute(request.payload.target);
       return successResponse(request, null);

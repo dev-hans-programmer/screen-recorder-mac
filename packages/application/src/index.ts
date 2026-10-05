@@ -10,6 +10,8 @@ export * from './use-cases/choose-recording-directory';
 export * from './use-cases/delete-recording';
 export * from './use-cases/export-diagnostics';
 export * from './use-cases/export-edited-recording';
+export * from './use-cases/get-or-create-editing-project';
+export * from './use-cases/save-editing-project';
 export * from './use-cases/get-recording-thumbnail';
 export * from './use-cases/get-recording-media';
 export * from './use-cases/get-recording-preview';

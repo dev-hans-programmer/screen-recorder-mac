@@ -4,6 +4,7 @@ import type {
   CaptureRegionDto,
   CapturePermissionsDto,
   CaptureSourceDto,
+  EditingProjectDto,
   IpcEvent,
   IpcResponse,
   RecordingArtifactDto,
@@ -34,6 +35,8 @@ export interface ScreenRecorderApi {
   getRecordingThumbnail(recordingId: string): Promise<string | null>;
   getRecordingMediaUrl(recordingId: string): Promise<string>;
   exportEditedRecording(edit: RecordingEditRequestDto): Promise<RecordingMetadataDto>;
+  loadEditingProject(recordingId: string): Promise<EditingProjectDto>;
+  saveEditingProject(project: EditingProjectDto): Promise<EditingProjectDto>;
   renameRecording(recordingId: string, title: string): Promise<RecordingMetadataDto>;
   openRecording(recordingId: string): Promise<void>;
   revealRecording(recordingId: string): Promise<void>;

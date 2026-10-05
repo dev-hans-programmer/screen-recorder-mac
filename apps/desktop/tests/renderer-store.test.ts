@@ -4,6 +4,7 @@ import type {
   AppPreferencesDto,
   CapturePermissionsDto,
   CaptureSourceDto,
+  EditingProjectDto,
   IpcEvent,
   RecordingArtifactDto,
   RecordingMetadataDto,
@@ -105,6 +106,36 @@ const validation: Awaited<ReturnType<ScreenRecorderApi['validateRecordingRequest
   warnings: [],
 };
 
+const editingProject: EditingProjectDto = {
+  schemaVersion: 1,
+  recordingId: 'recording-1',
+  title: 'Edited recording',
+  durationMs: 1_000,
+  updatedAt: 1_000,
+  tracks: [
+    {
+      id: 'screen-track',
+      kind: 'screen',
+      name: 'Screen',
+      order: 0,
+      visible: true,
+      muted: false,
+      locked: false,
+      gain: 1,
+      clips: [
+        {
+          id: 'screen-clip',
+          sourceRecordingId: 'recording-1',
+          sourceTrackIndex: null,
+          sourceStartMs: 0,
+          durationMs: 1_000,
+          timelineStartMs: 0,
+        },
+      ],
+    },
+  ],
+};
+
 function createApi() {
   let eventListener: ((event: IpcEvent) => void) | undefined;
   let currentPreferences = preferences;
@@ -134,6 +165,8 @@ function createApi() {
       failure: null,
       recovery: null,
     })),
+    loadEditingProject: vi.fn(async () => editingProject),
+    saveEditingProject: vi.fn(async (project) => project),
     renameRecording: vi.fn(async (_recordingId, title): Promise<RecordingMetadataDto> => ({
       ...artifact,
       title,
@@ -224,6 +257,7 @@ describe('RendererStore', () => {
         rotation: 0,
         mutedRanges: [],
         posterTimeMs: 0,
+        project: editingProject,
       }),
     ).resolves.toBe(true);
     expect(store.getState()).toMatchObject({

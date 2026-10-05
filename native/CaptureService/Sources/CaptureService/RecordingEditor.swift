@@ -27,10 +27,45 @@ actor RecordingEditor {
     }
 
     let composition = AVMutableComposition()
-    let sourceRange = CMTimeRange(
+    let project = configuration.project
+    let screenTrack = project?.tracks.first(where: { $0.kind == "screen" })
+    let screenClip = screenTrack?.clips.first
+    let fallbackSourceRange = CMTimeRange(
       start: time(milliseconds: configuration.trimStartMs),
       duration: time(milliseconds: configuration.trimEndMs - configuration.trimStartMs)
     )
+    // A project clip maps a source interval to a separate interval on the composition timeline.
+    let sourceRange: CMTimeRange
+    let screenTimelineStartMs: Double
+    let screenIsVisible: Bool
+    if let screenClip {
+      try validateSourceRange(
+        startMs: screenClip.sourceStartMs,
+        durationMs: screenClip.durationMs,
+        sourceDurationMs: sourceDurationSeconds * 1_000
+      )
+      sourceRange = CMTimeRange(
+        start: time(milliseconds: screenClip.sourceStartMs),
+        duration: time(milliseconds: screenClip.durationMs)
+      )
+      screenTimelineStartMs = screenClip.timelineStartMs
+      screenIsVisible = screenTrack?.visible ?? true
+    } else {
+      sourceRange = fallbackSourceRange
+      screenTimelineStartMs = 0
+      screenIsVisible = false
+    }
+    let compositionDurationMs = project.map { editingProject in
+      editingProject.tracks
+        .filter { ["screen", "microphone", "system-audio", "music"].contains($0.kind) }
+        .flatMap(\.clips)
+        .map { $0.timelineStartMs + $0.durationMs }
+        .max() ?? 0
+    } ?? (configuration.trimEndMs - configuration.trimStartMs)
+    guard compositionDurationMs >= 100 else {
+      throw NativeServiceError.invalidConfiguration("The editing project has no media to export.")
+    }
+    let compositionDuration = time(milliseconds: compositionDurationMs)
     guard let compositionVideoTrack = composition.addMutableTrack(
       withMediaType: .video,
       preferredTrackID: kCMPersistentTrackID_Invalid
@@ -39,22 +74,49 @@ actor RecordingEditor {
         "The editor could not create its video track."
       )
     }
-    try compositionVideoTrack.insertTimeRange(sourceRange, of: sourceVideoTrack, at: .zero)
+    if screenClip == nil {
+      compositionVideoTrack.insertEmptyTimeRange(
+        CMTimeRange(start: .zero, duration: compositionDuration)
+      )
+    } else {
+      if screenTimelineStartMs > 0 {
+        compositionVideoTrack.insertEmptyTimeRange(
+          CMTimeRange(start: .zero, duration: time(milliseconds: screenTimelineStartMs))
+        )
+      }
+      try compositionVideoTrack.insertTimeRange(
+        sourceRange,
+        of: sourceVideoTrack,
+        at: time(milliseconds: screenTimelineStartMs)
+      )
+      let screenEnd = time(
+        milliseconds: screenTimelineStartMs + CMTimeGetSeconds(sourceRange.duration) * 1_000
+      )
+      if CMTimeCompare(screenEnd, compositionDuration) < 0 {
+        compositionVideoTrack.insertEmptyTimeRange(
+          CMTimeRange(start: screenEnd, duration: CMTimeSubtract(compositionDuration, screenEnd))
+        )
+      }
+    }
 
     let videoLayout = try await makeVideoComposition(
       sourceTrack: sourceVideoTrack,
       compositionTrack: compositionVideoTrack,
-      duration: sourceRange.duration,
+      clipStart: time(milliseconds: screenTimelineStartMs),
+      clipDuration: screenClip == nil ? compositionDuration : sourceRange.duration,
+      timelineDuration: compositionDuration,
       crop: configuration.crop,
       rotation: configuration.rotation,
-      frameRate: configuration.frameRate
+      frameRate: configuration.frameRate,
+      isVisible: screenIsVisible
     )
     let audioMix = try await addAudioTracks(
       from: asset,
       to: composition,
-      sourceRange: sourceRange,
+      fallbackSourceRange: fallbackSourceRange,
       trimStartMs: configuration.trimStartMs,
-      mutedRanges: configuration.mutedRanges
+      mutedRanges: configuration.mutedRanges,
+      project: project
     )
 
     try FileManager.default.createDirectory(
@@ -94,10 +156,13 @@ actor RecordingEditor {
 
       // AVAssetImageGenerator may reject the exact end boundary, so keep the poster at least one
       // source frame inside the exported timeline.
-      let outputDurationMs = configuration.trimEndMs - configuration.trimStartMs
+      let outputDurationMs = CMTimeGetSeconds(compositionDuration) * 1_000
       let lastPosterTimeMs = max(0, outputDurationMs - (1_000 / Double(configuration.frameRate)))
+      let posterTimelineMs = screenClip.map {
+        $0.timelineStartMs + configuration.posterTimeMs - $0.sourceStartMs
+      } ?? (configuration.posterTimeMs - configuration.trimStartMs)
       let posterRelativeMs = min(
-        configuration.posterTimeMs - configuration.trimStartMs,
+        max(0, posterTimelineMs),
         lastPosterTimeMs
       )
       let thumbnailPath: String?
@@ -143,10 +208,13 @@ actor RecordingEditor {
   private func makeVideoComposition(
     sourceTrack: AVAssetTrack,
     compositionTrack: AVMutableCompositionTrack,
-    duration: CMTime,
+    clipStart: CMTime,
+    clipDuration: CMTime,
+    timelineDuration: CMTime,
     crop: NormalizedCropPayload,
     rotation: Int,
-    frameRate: Int
+    frameRate: Int,
+    isVisible: Bool
   ) async throws -> (composition: AVMutableVideoComposition, renderSize: CGSize) {
     let naturalSize = try await sourceTrack.load(.naturalSize)
     let preferredTransform = try await sourceTrack.load(.preferredTransform)
@@ -180,69 +248,127 @@ actor RecordingEditor {
       width: evenDimension(rotatedBounds.width),
       height: evenDimension(rotatedBounds.height)
     )
+    var instructions: [AVMutableVideoCompositionInstruction] = []
+    if CMTimeCompare(clipStart, .zero) > 0 {
+      instructions.append(blackInstruction(start: .zero, duration: clipStart))
+    }
+
     let instruction = AVMutableVideoCompositionInstruction()
-    instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
+    instruction.timeRange = CMTimeRange(start: clipStart, duration: clipDuration)
+    instruction.backgroundColor = NSColor.black.cgColor
     let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionTrack)
-    layerInstruction.setTransform(transform, at: .zero)
+    layerInstruction.setTransform(transform, at: clipStart)
+    if !isVisible {
+      layerInstruction.setOpacity(0, at: clipStart)
+    }
     instruction.layerInstructions = [layerInstruction]
+    instructions.append(instruction)
+
+    let clipEnd = CMTimeAdd(clipStart, clipDuration)
+    if CMTimeCompare(clipEnd, timelineDuration) < 0 {
+      instructions.append(
+        blackInstruction(start: clipEnd, duration: CMTimeSubtract(timelineDuration, clipEnd))
+      )
+    }
 
     let videoComposition = AVMutableVideoComposition()
-    videoComposition.instructions = [instruction]
+    videoComposition.instructions = instructions
     videoComposition.renderSize = renderSize
     videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(frameRate))
     return (videoComposition, renderSize)
   }
 
+  private func blackInstruction(
+    start: CMTime,
+    duration: CMTime
+  ) -> AVMutableVideoCompositionInstruction {
+    let instruction = AVMutableVideoCompositionInstruction()
+    instruction.timeRange = CMTimeRange(start: start, duration: duration)
+    instruction.backgroundColor = NSColor.black.cgColor
+    instruction.layerInstructions = []
+    return instruction
+  }
+
   private func addAudioTracks(
     from asset: AVURLAsset,
     to composition: AVMutableComposition,
-    sourceRange: CMTimeRange,
+    fallbackSourceRange: CMTimeRange,
     trimStartMs: Double,
-    mutedRanges: [MuteRangePayload]
+    mutedRanges: [MuteRangePayload],
+    project: EditingProjectPayload?
   ) async throws -> AVMutableAudioMix? {
     let sourceTracks = try await asset.loadTracks(withMediaType: .audio)
     guard !sourceTracks.isEmpty else { return nil }
+    let assetDuration = try await asset.load(.duration)
+    let assetDurationMs = CMTimeGetSeconds(assetDuration) * 1_000
 
     var parameters: [AVMutableAudioMixInputParameters] = []
-    for sourceTrack in sourceTracks {
-      guard let targetTrack = composition.addMutableTrack(
-        withMediaType: .audio,
-        preferredTrackID: kCMPersistentTrackID_Invalid
-      ) else {
-        throw NativeServiceError.fileFinalizationFailed(
-          "The editor could not create an audio track."
-        )
+    for (sourceTrackIndex, sourceTrack) in sourceTracks.enumerated() {
+      let lanes = project?.tracks.filter { track in
+        ["microphone", "system-audio", "music"].contains(track.kind) &&
+          track.clips.contains(where: { $0.sourceTrackIndex == sourceTrackIndex })
       }
-      try targetTrack.insertTimeRange(sourceRange, of: sourceTrack, at: .zero)
-      let inputParameters = AVMutableAudioMixInputParameters(track: targetTrack)
-      var cursorMs = 0.0
-      let relativeRanges = mutedRanges
-        .map { (startMs: $0.startMs - trimStartMs, endMs: $0.endMs - trimStartMs) }
-        .sorted { $0.startMs < $1.startMs }
-      for range in relativeRanges {
-        let muteStartMs = max(cursorMs, range.startMs)
+      if project != nil && (lanes?.isEmpty ?? true) { continue }
+
+      let clipSources: [(EditingTrackPayload?, CMTimeRange, Double)]
+      if let lanes {
+        clipSources = try lanes.flatMap { lane in
+          try lane.clips
+            .filter { $0.sourceTrackIndex == sourceTrackIndex }
+            .map { clip in
+              try validateSourceRange(
+                startMs: clip.sourceStartMs,
+                durationMs: clip.durationMs,
+                sourceDurationMs: assetDurationMs
+              )
+              return (
+                lane,
+                CMTimeRange(
+                  start: time(milliseconds: clip.sourceStartMs),
+                  duration: time(milliseconds: clip.durationMs)
+                ),
+                clip.timelineStartMs
+              )
+            }
+        }
+      } else {
+        clipSources = [(nil, fallbackSourceRange, 0)]
+      }
+
+      for (lane, clipSourceRange, timelineStartMs) in clipSources {
+        guard let targetTrack = composition.addMutableTrack(
+          withMediaType: .audio,
+          preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+          throw NativeServiceError.fileFinalizationFailed(
+            "The editor could not create an audio track."
+          )
+        }
+        let timelineStart = time(milliseconds: timelineStartMs)
+        try targetTrack.insertTimeRange(clipSourceRange, of: sourceTrack, at: timelineStart)
+        let inputParameters = AVMutableAudioMixInputParameters(track: targetTrack)
+        let baseGain: Float = lane?.muted == true ? 0 : Float(lane?.gain ?? 1)
+        let clipStartMs = timelineStartMs
+        let clipEndMs = timelineStartMs + CMTimeGetSeconds(clipSourceRange.duration) * 1_000
         setConstantVolume(
-          1,
-          fromMs: cursorMs,
-          toMs: muteStartMs,
+          baseGain,
+          fromMs: clipStartMs,
+          toMs: clipEndMs,
           parameters: inputParameters
         )
-        let muteEndMs = max(muteStartMs, range.endMs)
-        setConstantVolume(
-          0,
-          fromMs: muteStartMs,
-          toMs: muteEndMs,
-          parameters: inputParameters
-        )
-        cursorMs = muteEndMs
+
+        for range in mutedRanges {
+          let muteStartMs = max(clipStartMs, range.startMs - (project == nil ? trimStartMs : 0))
+          let muteEndMs = min(clipEndMs, range.endMs - (project == nil ? trimStartMs : 0))
+          setConstantVolume(
+            0,
+            fromMs: muteStartMs,
+            toMs: muteEndMs,
+            parameters: inputParameters
+          )
+        }
+        parameters.append(inputParameters)
       }
-      setConstantVolume(
-        1,
-        fromMs: cursorMs,
-        toMs: CMTimeGetSeconds(sourceRange.duration) * 1_000,
-        parameters: inputParameters
-      )
-      parameters.append(inputParameters)
     }
     let mix = AVMutableAudioMix()
     mix.inputParameters = parameters
@@ -363,6 +489,19 @@ actor RecordingEditor {
   private func time(milliseconds: Double) -> CMTime {
     CMTime(seconds: max(0, milliseconds) / 1_000, preferredTimescale: 60_000)
   }
+
+  private func validateSourceRange(
+    startMs: Double,
+    durationMs: Double,
+    sourceDurationMs: Double
+  ) throws {
+    guard startMs.isFinite, durationMs.isFinite, startMs >= 0, durationMs > 0,
+          startMs + durationMs <= sourceDurationMs + 1 else {
+      throw NativeServiceError.invalidConfiguration(
+        "An editing clip extends beyond its source recording."
+      )
+    }
+  }
 }
 
 private struct RecordingEditConfiguration {
@@ -380,6 +519,7 @@ private struct RecordingEditConfiguration {
   let rotation: Int
   let mutedRanges: [MuteRangePayload]
   let posterTimeMs: Double
+  let project: EditingProjectPayload?
 
   init(_ payload: RecordingEditPayload) throws {
     guard !payload.inputPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -420,11 +560,40 @@ private struct RecordingEditConfiguration {
       throw NativeServiceError.invalidConfiguration("The editor crop or rotation is invalid.")
     }
     guard payload.mutedRanges.allSatisfy({ range in
-      range.startMs >= payload.trimStartMs &&
-        range.endMs <= payload.trimEndMs &&
+      range.startMs >= (payload.project == nil ? payload.trimStartMs : 0) &&
+        range.endMs <= (payload.project?.durationMs ?? payload.trimEndMs) &&
         range.endMs > range.startMs
     }) else {
       throw NativeServiceError.invalidConfiguration("An editor mute range is invalid.")
+    }
+    if let project = payload.project {
+      let trackIDs = Set(project.tracks.map(\.id))
+      guard project.schemaVersion == 1,
+            !project.recordingId.isEmpty,
+            !project.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            project.durationMs.isFinite && project.durationMs > 0,
+            project.updatedAt.isFinite && project.updatedAt >= 0,
+            project.tracks.count <= 64,
+            !project.tracks.isEmpty,
+            trackIDs.count == project.tracks.count,
+            project.tracks.allSatisfy({ track in
+              ["screen", "webcam", "microphone", "system-audio", "music", "captions", "overlays"]
+                .contains(track.kind) &&
+                !track.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                track.order >= 0 && track.clips.count <= 500 &&
+                track.gain.isFinite && track.gain >= 0 && track.gain <= 4 &&
+                track.clips.allSatisfy({ clip in
+                  clip.sourceRecordingId == project.recordingId &&
+                    (clip.sourceTrackIndex.map { $0 >= 0 } ?? true) &&
+                    clip.sourceStartMs.isFinite && clip.sourceStartMs >= 0 &&
+                    clip.durationMs.isFinite && clip.durationMs > 0 &&
+                    clip.timelineStartMs.isFinite && clip.timelineStartMs >= 0 &&
+                    (clip.timelineStartMs + clip.durationMs).isFinite &&
+                    clip.timelineStartMs + clip.durationMs <= project.durationMs + 1
+                })
+            }) else {
+        throw NativeServiceError.invalidConfiguration("The editing project timeline is invalid.")
+      }
     }
     self.inputPath = payload.inputPath
     self.outputPath = payload.outputPath
@@ -440,6 +609,7 @@ private struct RecordingEditConfiguration {
     self.rotation = payload.rotation
     self.mutedRanges = payload.mutedRanges
     self.posterTimeMs = payload.posterTimeMs
+    self.project = payload.project
   }
 }
 #endif

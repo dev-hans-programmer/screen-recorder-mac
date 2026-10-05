@@ -6,6 +6,7 @@ import type {
   CaptureRegionDto,
   CapturePermissionsDto,
   CaptureSourceDto,
+  EditingProjectDto,
   IpcEvent,
   RecordingArtifactDto,
   RecordingEditRequestDto,
@@ -262,6 +263,14 @@ export class RendererStore {
 
   public getRecordingMediaUrl(recordingId: string): Promise<string> {
     return this.api.getRecordingMediaUrl(recordingId);
+  }
+
+  public loadEditingProject(recordingId: string): Promise<EditingProjectDto> {
+    return this.api.loadEditingProject(recordingId);
+  }
+
+  public saveEditingProject(project: EditingProjectDto): Promise<EditingProjectDto> {
+    return this.api.saveEditingProject(project);
   }
 
   public openEditor(recordingId: string): void {

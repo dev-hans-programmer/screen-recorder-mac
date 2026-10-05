@@ -220,6 +220,36 @@ struct MuteRangePayload: Codable, Sendable, Equatable {
   let endMs: Double
 }
 
+struct EditingClipPayload: Codable, Sendable, Equatable {
+  let id: String
+  let sourceRecordingId: String
+  let sourceTrackIndex: Int?
+  let sourceStartMs: Double
+  let durationMs: Double
+  let timelineStartMs: Double
+}
+
+struct EditingTrackPayload: Codable, Sendable, Equatable {
+  let id: String
+  let kind: String
+  let name: String
+  let order: Int
+  let visible: Bool
+  let muted: Bool
+  let locked: Bool
+  let gain: Double
+  let clips: [EditingClipPayload]
+}
+
+struct EditingProjectPayload: Codable, Sendable, Equatable {
+  let schemaVersion: Int
+  let recordingId: String
+  let title: String
+  let durationMs: Double
+  let updatedAt: Double
+  let tracks: [EditingTrackPayload]
+}
+
 struct RecordingEditPayload: Codable, Sendable, Equatable {
   let inputPath: String
   let outputPath: String
@@ -235,6 +265,7 @@ struct RecordingEditPayload: Codable, Sendable, Equatable {
   let rotation: Int
   let mutedRanges: [MuteRangePayload]
   let posterTimeMs: Double
+  let project: EditingProjectPayload?
 }
 
 struct NativeEditedRecordingResult: Codable, Sendable, Equatable {

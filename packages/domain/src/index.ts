@@ -5,6 +5,7 @@ export * from './capture/capture-source-selection';
 export * from './diagnostics/recording-diagnostics';
 export * from './errors/domain-error';
 export * from './library/file-path';
+export * from './editor/editing-project';
 export * from './library/recording-artifact';
 export * from './library/recording-edit';
 export * from './library/recording-metadata';
